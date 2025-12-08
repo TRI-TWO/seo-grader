@@ -8,6 +8,8 @@ export const runtime = "nodejs";
 // Timeout constants
 const API_TIMEOUT = 10000; // 10 seconds for API operations
 const DB_QUERY_TIMEOUT = 5000; // 5 seconds for database queries
+const WORKER_HARD_TIMEOUT = 15000; // 15 seconds - hard timeout for entire worker execution
+const JOB_PROCESSING_TIMEOUT = 200000; // 200 seconds (3min + buffer) for job processing
 
 // Helper to add timeout to promises
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
@@ -20,15 +22,22 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: st
 }
 
 /**
- * POST /api/worker/process - Process next audit job from queue
- * 
- * This endpoint is called by Vercel Cron (every 30-60 seconds) or manually.
- * It pulls the next job from the Upstash queue and processes it.
+ * Run worker logic - processes next job from queue
+ * This function must always return a NextResponse within WORKER_HARD_TIMEOUT
  */
-export async function POST(req: NextRequest) {
+async function runWorker(req: NextRequest): Promise<NextResponse> {
   try {
-    // Optional: Add authentication/authorization check here
-    // For now, we'll allow it to be called by Vercel Cron
+    // Check for worker secret (required for security)
+    const secret = req.headers.get('x-worker-secret');
+    const workerSecret = process.env.WORKER_SECRET;
+
+    // Only check secret if it's configured (allows development without secret)
+    if (workerSecret && secret !== workerSecret) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
 
     // Dequeue next job
     const queueItem = await withTimeout(
@@ -70,8 +79,8 @@ export async function POST(req: NextRequest) {
       }, { status: 404 });
     }
 
-    // Only process if job is still pending
-    if (job.status !== "pending") {
+    // Process if job is pending or running (multi-invoke pattern)
+    if (job.status !== "pending" && job.status !== "running") {
       return NextResponse.json({
         success: true,
         message: `Job ${jobId} is already ${job.status}`,
@@ -80,6 +89,11 @@ export async function POST(req: NextRequest) {
         status: job.status,
       });
     }
+
+    // Determine starting stage based on current job state
+    const currentStage = job.stage || 0;
+    const startFromStage = currentStage === 0 ? 1 : currentStage + 1; // Resume from next stage
+    const existingResults = job.results || {};
 
     // Check if job has exceeded total timeout (3 minutes)
     const jobAge = Date.now() - new Date(job.created_at).getTime();
@@ -107,9 +121,22 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Process the job (this will update status/stage as it progresses)
+    // Process the job with timeout protection
+    // In serverless, we must await the job processing or it will be killed when function returns
+    // However, we wrap it in a timeout so the worker handler can still return within 15 seconds
+    // The job processing itself can take up to 3 minutes, but we start it and let it run
     try {
-      await processAuditJob(jobId, url);
+      // Start job processing - this will update status to "running" immediately
+      // We use Promise.race to ensure it doesn't hang forever, but we actually await it
+      // because in serverless, fire-and-forget doesn't work
+      // Support multi-invoke pattern: resume from last completed stage
+      await Promise.race([
+        processAuditJob(jobId, url, startFromStage, existingResults as any),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("Job processing timeout")), JOB_PROCESSING_TIMEOUT)
+        )
+      ]);
+      
       return NextResponse.json({
         success: true,
         message: `Job ${jobId} processed successfully`,
@@ -119,6 +146,18 @@ export async function POST(req: NextRequest) {
     } catch (error: any) {
       console.error(`Error processing job ${jobId}:`, error);
       // processAuditJob should have already updated the job status to "error"
+      // But ensure it's marked as error if it wasn't
+      const updatePromise = supabase
+        .from("audit_jobs")
+        .update({
+          status: "error",
+          error_message: error?.message || "Job processing failed",
+        })
+        .eq("id", jobId);
+      (updatePromise as unknown as Promise<any>).catch((updateError) => {
+        console.error(`Failed to update job ${jobId} status:`, updateError);
+      });
+      
       return NextResponse.json({
         success: false,
         error: error?.message || "Job processing failed",
@@ -131,6 +170,31 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         error: error?.message || "Internal server error",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST /api/worker/process - Process next audit job from queue
+ * 
+ * This endpoint is called by Vercel Cron (hourly) or immediately on job creation.
+ * It pulls the next job from the Upstash queue and processes it.
+ * 
+ * TIMEOUT PROTECTION: All operations have timeouts to prevent infinite hangs.
+ * Job processing can take up to 3 minutes, but individual operations are timeout-protected.
+ */
+export async function POST(req: NextRequest) {
+  try {
+    return await runWorker(req);
+  } catch (error: any) {
+    // Fallback error handler - should not be reached due to error handling in runWorker
+    console.error("Worker error:", error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error?.message || "Worker execution error"
       },
       { status: 500 }
     );

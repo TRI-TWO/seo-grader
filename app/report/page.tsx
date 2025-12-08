@@ -108,15 +108,8 @@ function ReportPageContent() {
     let isMounted = true;
 
     const pollJobStatus = async () => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
       try {
-        const response = await fetch(`/api/audit/${jobId}`, {
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
+        const response = await fetch(`/api/audit/${jobId}`);
         
         if (!response.ok) {
           if (response.status === 404) {
@@ -277,16 +270,10 @@ function ReportPageContent() {
         }
 
       } catch (err: any) {
-        clearTimeout(timeoutId);
         console.error("Error polling job status:", err);
         if (isMounted) {
-          if (err.name === "AbortError") {
-            // Timeout - don't set error, just log and continue polling
-            console.warn("Poll request timed out, will retry on next poll");
-          } else {
-            setError(err?.message || "Unknown error occurred");
-            setLoading(false);
-          }
+          setError(err?.message || "Unknown error occurred");
+          setLoading(false);
         }
       }
     };

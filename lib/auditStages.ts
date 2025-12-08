@@ -681,9 +681,16 @@ export async function processStage3(
 
 /**
  * Process all stages for a job
+ * Supports resuming from a specific stage (for multi-invoke pattern)
+ * 
+ * @param jobId - Job ID to process
+ * @param url - URL to audit
+ * @param startFromStage - Stage to start from (1, 2, or 3). If not provided, starts from stage 1.
+ * @param existingResults - Existing results to continue from (if resuming)
  */
-export async function processAuditJob(jobId: string, url: string): Promise<void> {
+export async function processAuditJob(jobId: string, url: string, startFromStage: number = 1, existingResults?: Partial<AuditResults>): Promise<void> {
   const startTime = Date.now();
+  let currentResults = existingResults || {};
 
   try {
     // Load states - try to fetch from API, fallback to empty array
@@ -698,6 +705,62 @@ export async function processAuditJob(jobId: string, url: string): Promise<void>
       if (statesRes.ok) {
         states = await statesRes.json() || [];
       }
+    } catch {
+      // If states API fails, continue with empty array
+      states = [];
+    }
+
+    // Stage 1: Fast Pass
+    if (startFromStage <= 1) {
+      currentResults = await processStage1(jobId, url);
+
+      // Check timeout
+      if (Date.now() - startTime > TOTAL_JOB_TIMEOUT) {
+        await supabase
+          .from("audit_jobs")
+          .update({
+            status: "done",
+            partial_audit: true,
+            results: { ...currentResults, partialAudit: true } as any,
+          })
+          .eq("id", jobId);
+        return;
+      }
+    }
+
+    // Stage 2: Structure + Media
+    if (startFromStage <= 2) {
+      currentResults = await processStage2(jobId, currentResults, states);
+
+      // Check timeout
+      if (Date.now() - startTime > TOTAL_JOB_TIMEOUT) {
+        await supabase
+          .from("audit_jobs")
+          .update({
+            status: "done",
+            partial_audit: true,
+            results: { ...currentResults, partialAudit: true } as any,
+          })
+          .eq("id", jobId);
+        return;
+      }
+    }
+
+    // Stage 3: AI Optimization
+    if (startFromStage <= 3) {
+      await processStage3(jobId, currentResults);
+    }
+  } catch (error: any) {
+    await supabase
+      .from("audit_jobs")
+      .update({
+        status: "error",
+        error_message: error?.message || "Job processing failed",
+      })
+      .eq("id", jobId);
+    throw error;
+  }
+}
     } catch {
       // If states API fails, continue with empty array
       states = [];

@@ -1,12 +1,13 @@
 /**
- * Upstash Redis Client Initialization
+ * Upstash Redis Connection and Utilities
  * 
- * Creates a singleton Upstash Redis client for queue operations,
- * caching, and rate limiting.
+ * Provides Redis client, rate limiting, and distributed locking functionality.
+ * Uses Upstash REST API (no persistent connections needed).
  */
 
 import { Redis } from "@upstash/redis";
 
+// Lazy initialization pattern
 let redisClient: Redis | null = null;
 
 function getRedisClient(): Redis {
@@ -30,6 +31,7 @@ function getRedisClient(): Redis {
   return redisClient;
 }
 
+// Singleton pattern via Proxy
 export const redis = new Proxy({} as Redis, {
   get(_target, prop) {
     return getRedisClient()[prop as keyof Redis];
@@ -37,66 +39,101 @@ export const redis = new Proxy({} as Redis, {
 });
 
 /**
- * Rate Limiting Utilities
+ * Rate limiting: Check if request is allowed (10 requests/hour per IP)
+ * 
+ * @param ip - IP address to check rate limit for
+ * @returns { allowed: boolean, remaining: number, resetAt: number }
  */
+export async function checkRateLimit(
+  ip: string
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  const key = `rate_limit:anonymous:${ip}`;
+  const limit = 10; // 10 requests per hour
+  const ttl = 3600; // 1 hour in seconds
 
-const RATE_LIMIT_PREFIX = "rate_limit:";
-const LOCK_PREFIX = "lock:url:";
-const RATE_LIMIT_WINDOW = 3600; // 1 hour in seconds
-const RATE_LIMIT_MAX_REQUESTS = 10; // 10 requests per hour for anonymous users
-const LOCK_TTL = 300; // 5 minutes for single-flight locks
+  try {
+    // Get current count
+    const current = await redis.get<number>(key);
+    const count = current || 0;
 
-/**
- * Check and increment rate limit for an IP address
- * Returns true if within limit, false if rate limited
- */
-export async function checkRateLimit(identifier: string): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
-  const key = `${RATE_LIMIT_PREFIX}anonymous:${identifier}`;
-  const now = Math.floor(Date.now() / 1000);
-  const windowStart = now - RATE_LIMIT_WINDOW;
+    if (count >= limit) {
+      // Rate limit exceeded
+      const ttlRemaining = await redis.ttl(key);
+      const resetAt = Math.floor(Date.now() / 1000) + (ttlRemaining > 0 ? ttlRemaining : ttl);
+      
+      return {
+        allowed: false,
+        remaining: 0,
+        resetAt,
+      };
+    }
 
-  // Get current count
-  const count = await redis.get<number>(key) || 0;
+    // Increment counter
+    const newCount = await redis.incr(key);
+    
+    // Set TTL if this is the first request
+    if (newCount === 1) {
+      await redis.expire(key, ttl);
+    }
 
-  if (count >= RATE_LIMIT_MAX_REQUESTS) {
-    // Rate limited - get TTL to know when it resets
-    const ttl = await redis.ttl(key);
+    const remaining = Math.max(0, limit - newCount);
+    const resetAt = Math.floor(Date.now() / 1000) + ttl;
+
     return {
-      allowed: false,
-      remaining: 0,
-      resetAt: now + (ttl > 0 ? ttl : RATE_LIMIT_WINDOW),
+      allowed: true,
+      remaining,
+      resetAt,
+    };
+  } catch (error) {
+    console.error("Rate limit check error:", error);
+    // On error, allow the request (fail open)
+    return {
+      allowed: true,
+      remaining: limit,
+      resetAt: Math.floor(Date.now() / 1000) + ttl,
     };
   }
+}
 
-  // Increment counter
-  const newCount = await redis.incr(key);
-  if (newCount === 1) {
-    // First request in window, set TTL
-    await redis.expire(key, RATE_LIMIT_WINDOW);
+/**
+ * Acquire distributed lock for a URL
+ * Prevents duplicate job processing for the same URL
+ * 
+ * @param url - Normalized URL to lock
+ * @returns true if lock was acquired, false if already locked
+ */
+export async function acquireLock(url: string): Promise<boolean> {
+  const key = `lock:url:${url}`;
+  const ttl = 420; // 7 minutes (420 seconds) - safely exceeds max worker window
+
+  try {
+    // SET key "1" EX 420 NX - only set if key doesn't exist
+    const result = await redis.set(key, "1", {
+      ex: ttl,
+      nx: true, // Only set if key doesn't exist
+    });
+
+    return result === "OK";
+  } catch (error) {
+    console.error("Lock acquisition error:", error);
+    // On error, assume lock failed (fail closed)
+    return false;
   }
-
-  return {
-    allowed: true,
-    remaining: RATE_LIMIT_MAX_REQUESTS - newCount,
-    resetAt: now + RATE_LIMIT_WINDOW,
-  };
 }
 
 /**
- * Acquire a single-flight lock for a URL
- * Returns true if lock acquired, false if already locked
+ * Release distributed lock for a URL
+ * 
+ * @param url - Normalized URL to unlock
  */
-export async function acquireLock(normalizedUrl: string): Promise<boolean> {
-  const key = `${LOCK_PREFIX}${normalizedUrl}`;
-  const result = await redis.set(key, "1", { ex: LOCK_TTL, nx: true });
-  return result === "OK";
-}
+export async function releaseLock(url: string): Promise<void> {
+  const key = `lock:url:${url}`;
 
-/**
- * Release a single-flight lock for a URL
- */
-export async function releaseLock(normalizedUrl: string): Promise<void> {
-  const key = `${LOCK_PREFIX}${normalizedUrl}`;
-  await redis.del(key);
+  try {
+    await redis.del(key);
+  } catch (error) {
+    console.error("Lock release error:", error);
+    // Ignore errors on release - lock will expire naturally
+  }
 }
 

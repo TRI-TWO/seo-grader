@@ -202,6 +202,20 @@ export async function POST(req: NextRequest) {
         "Queue enqueue timed out"
       );
 
+      // Immediately trigger worker processing (fire-and-forget)
+      // This ensures jobs process immediately instead of waiting for cron
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+      const workerSecret = process.env.WORKER_SECRET;
+
+      fetch(`${baseUrl}/api/worker/process`, {
+        method: 'POST',
+        headers: workerSecret ? { 'x-worker-secret': workerSecret } : {},
+      }).catch(() => {
+        // Fire-and-forget: if immediate trigger fails, cron will pick it up
+        console.log('Immediate worker trigger failed, will be picked up by cron');
+      });
+
       // Release lock after enqueueing
       await withTimeout(
         releaseLock(targetUrl),

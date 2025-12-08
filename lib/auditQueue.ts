@@ -2,7 +2,7 @@
  * Audit Queue System
  * 
  * Uses Upstash Redis for distributed queue processing.
- * Jobs are enqueued with LPUSH and dequeued with RPOP.
+ * Jobs are enqueued with RPUSH and dequeued with LPOP (true FIFO).
  */
 
 import { redis } from "./upstash";
@@ -26,15 +26,15 @@ class AuditQueue {
       enqueuedAt: Date.now(),
     };
 
-    await redis.lpush(QUEUE_KEY, JSON.stringify(item));
+    await redis.rpush(QUEUE_KEY, JSON.stringify(item));
   }
 
   /**
-   * Dequeue the next job (FIFO - removes from right side)
+   * Dequeue the next job (FIFO - removes from left side)
    * Returns null if queue is empty
    */
   async dequeue(): Promise<QueueItem | null> {
-    const item = await redis.rpop<string>(QUEUE_KEY);
+    const item = await redis.lpop<string>(QUEUE_KEY);
     if (!item) {
       return null;
     }

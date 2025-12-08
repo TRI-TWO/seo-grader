@@ -1,1150 +1,408 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 
-type GradeResult = {
-  score: number; // 0–100
-  message: string;
-};
-
-type TechnicalResult = {
-  score: number; // 0–100
-  details: {
-    h1Count: number;
-    h1Texts: string[];
-    robotsContent: string | null;
-    wordCount: number;
-    bodyText: string;
-    imageCount: number;
-    imagesWithoutAlt: number;
-    hasFavicon: boolean;
-    hasCanonical: boolean;
-    detectedTitle: string | null;
-    totalLinks: number;
-    internalLinks: number;
-    externalLinks: number;
-    nofollowLinks: number;
-    imageBadFilenameCount: number;
-    imageGoodFilenameCount: number;
-  };
-  messages: string[];
-};
-
-type StatusLevel = "good" | "warn" | "bad";
-
-const STOPWORDS = new Set([
-  "the",
-  "and",
-  "or",
-  "but",
-  "if",
-  "a",
-  "an",
-  "to",
-  "of",
-  "in",
-  "on",
-  "for",
-  "with",
-  "at",
-  "by",
-  "from",
-  "about",
-  "as",
-  "into",
-  "like",
-  "through",
-  "after",
-  "over",
-  "between",
-  "out",
-  "against",
-  "during",
-  "without",
-  "before",
-  "under",
-  "around",
-  "among",
-  "is",
-  "are",
-  "was",
-  "were",
-  "be",
-  "been",
-  "being",
-  "it",
-  "this",
-  "that",
-  "these",
-  "those",
-  "you",
-  "your",
-  "yours",
-  "their",
-  "them",
-  "they",
-]);
-
-const statusDotClass: Record<StatusLevel, string> = {
-  good: "bg-green-500",
-  warn: "bg-yellow-400",
-  bad: "bg-red-500",
-};
-
-const statusTextClass: Record<StatusLevel, string> = {
-  good: "text-green-700",
-  warn: "text-yellow-600",
-  bad: "text-red-600",
-};
-
-const extractKeywords = (text: string, limit = 10): string[] => {
-  if (!text) return [];
-  const cleaned = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
-  const freq: Record<string, number> = {};
-  cleaned.forEach((w) => (freq[w] = (freq[w] || 0) + 1));
-  return Object.entries(freq)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-    .map(([word]) => word);
-};
-
-const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const computeTitleGrade = (
-  titleTag: string,
-  selectedStateAbbrs: string[],
-  extractedKeywords: string[],
-  statesList: any[]
-): GradeResult => {
-  if (!titleTag) {
-    return { score: 0, message: "Missing title tag." };
-  }
-  const tag = titleTag.toLowerCase();
-  let score = 100;
-  const messages: string[] = [];
-
-  // -------- Locality detection (multi-select + fallback) --------
-  let hasLocality = false;
-  let checkedLocality = false;
-  if (selectedStateAbbrs.length > 0 && statesList.length > 0) {
-    checkedLocality = true;
-    for (const abbr of selectedStateAbbrs) {
-      const s = statesList.find((st: any) => st.abbr === abbr);
-      if (!s) continue;
-      const nameRegex = new RegExp("\\b" + escapeRegex(s.name) + "\\b", "i");
-      const abbrRegex = new RegExp("\\b" + escapeRegex(s.abbr) + "\\b", "i");
-      if (nameRegex.test(titleTag) || abbrRegex.test(titleTag)) {
-        hasLocality = true;
-        break;
-      }
-    }
-  } else if (statesList.length > 0) {
-    checkedLocality = true;
-    for (const s of statesList) {
-      const name = (s.name || "").toString();
-      const abbr = (s.abbr || "").toString();
-      if (!name && !abbr) continue;
-      if (name) {
-        const nameRegex = new RegExp("\\b" + escapeRegex(name) + "\\b", "i");
-        if (nameRegex.test(titleTag)) {
-          hasLocality = true;
-          break;
-        }
-      }
-      if (abbr) {
-        const abbrRegex = new RegExp("\\b" + escapeRegex(abbr) + "\\b", "i");
-        if (abbrRegex.test(titleTag)) {
-          hasLocality = true;
-          break;
-        }
-      }
-    }
-  }
-
-  if (checkedLocality) {
-    if (!hasLocality) {
-      score -= 25;
-      messages.push("No locality (city/county/state) detected.");
-    } else {
-      messages.push("Locality match found.");
-    }
-  }
-
-  // -------- Service keyword detection --------
-  const bizWords = [
-    "roofing",
-    "contractor",
-    "remodeling",
-    "kitchen",
-    "bath",
-    "siding",
-    "windows",
-    "builder",
-    "home improvement",
-    "plumbing",
-    "hvac",
-    "heating",
-    "cooling",
-    "construction",
-  ];
-  const hasBiz = bizWords.some((kw) => tag.includes(kw));
-  if (!hasBiz) {
-    score -= 25;
-    messages.push("Missing strong service keyword.");
-  } else {
-    messages.push("Service keyword detected.");
-  }
-
-  // -------- Title length --------
-  if (titleTag.length < 30 || titleTag.length > 65) {
-    score -= 15;
-    messages.push("Title tag length should be 30–65 characters.");
-  } else {
-    messages.push("Good title tag length.");
-  }
-
-  // -------- Separator --------
-  if (!tag.includes("|") && !tag.includes("-") && !tag.includes("–")) {
-    score -= 10;
-    messages.push("Missing separator ('|' or '-' or '–').");
-  }
-
-  // -------- Semantic alignment with keywords --------
-  if (extractedKeywords.length > 0) {
-    const related = extractedKeywords.some((kw) => tag.includes(kw));
-    if (!related) {
-      score -= 20;
-      messages.push("Title does not match extracted page keywords.");
-    } else {
-      messages.push("Title semantically aligned with page content.");
-    }
-  }
-
-  return { score: Math.max(0, score), message: messages.join(" ") };
-};
-
-const analyzeHtml = (html: string, baseUrl?: string): TechnicalResult => {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-
-  const h1s = Array.from(doc.getElementsByTagName("h1"));
-  const h1Count = h1s.length;
-  const h1Texts = h1s.map((h) => h.textContent?.trim() || "");
-
-  const robotsMeta = doc.querySelector("meta[name='robots']");
-  const robotsContent = robotsMeta?.getAttribute("content") || null;
-
-  const bodyText = doc.body?.textContent || "";
-  const wordCount = bodyText.split(/\s+/).filter(Boolean).length;
-
-  const imgs = Array.from(doc.getElementsByTagName("img"));
-  const imageCount = imgs.length;
-  const imagesWithoutAlt = imgs.filter(
-    (img) => !img.getAttribute("alt") || img.getAttribute("alt")!.trim() === ""
-  ).length;
-
-  // Soft filename rules (Option B)
-  let imageBadFilenameCount = 0;
-  if (imageCount > 0) {
-    const autoPrefixes = ["img", "dsc", "pxl", "image", "photo", "screenshot"];
-    imgs.forEach((img) => {
-      const src = img.getAttribute("src") || "";
-      if (!src) return;
-      const filePart = src.split("?")[0].split("#")[0].split("/").pop() || "";
-      if (!filePart) return;
-      const lower = filePart.toLowerCase();
-      const base = lower.replace(/\.[a-z0-9]+$/i, "");
-      const isAutoPrefix = autoPrefixes.some((p) => base.startsWith(p));
-      const isNumericOnly = /^[0-9_-]+$/.test(base);
-      const isGenericImage = /^image\d*$/i.test(base);
-      if (isAutoPrefix || isNumericOnly || isGenericImage) {
-        imageBadFilenameCount += 1;
-      }
-    });
-  }
-  const imageGoodFilenameCount =
-    imageCount > 0 ? Math.max(0, imageCount - imageBadFilenameCount) : 0;
-
-  const favicon =
-    doc.querySelector("link[rel~='icon']") ||
-    doc.querySelector("link[rel='shortcut icon']");
-  const hasFavicon = !!favicon;
-
-  const canonical = doc.querySelector("link[rel='canonical']");
-  const hasCanonical = !!canonical;
-
-  const titleEl = doc.querySelector("title");
-  const detectedTitle = titleEl?.textContent?.trim() || null;
-
-  const anchors = Array.from(doc.getElementsByTagName("a"));
-  const totalLinks = anchors.length;
-  let internalLinks = 0;
-  let externalLinks = 0;
-  let nofollowLinks = 0;
-  let host: string | null = null;
-  if (baseUrl) {
-    try {
-      host = new URL(baseUrl).hostname;
-    } catch {
-      host = null;
-    }
-  }
-
-  anchors.forEach((a) => {
-    const href = a.getAttribute("href") || "";
-    const rel = a.getAttribute("rel") || "";
-    if (!href) return;
-    if (/nofollow/i.test(rel)) {
-      nofollowLinks += 1;
-    }
-    if (!host) return;
-    if (/^https?:\/\//i.test(href)) {
-      try {
-        const linkHost = new URL(href).hostname;
-        if (linkHost === host) internalLinks += 1;
-        else externalLinks += 1;
-      } catch {
-        /* ignore */
-      }
-    } else {
-      internalLinks += 1;
-    }
-  });
-
-  let score = 100;
-  const messages: string[] = [];
-
-  if (h1Count === 0) {
-    score -= 25;
-    messages.push("No H1 found.");
-  } else if (h1Count > 1) {
-    score -= 10;
-    messages.push("Multiple H1 tags found.");
-  } else {
-    messages.push("Single H1 detected.");
-  }
-
-  if (wordCount < 300) {
-    score -= 20;
-    messages.push("Low word count (<300).");
-  } else {
-    messages.push("Healthy word count.");
-  }
-
-  if (imageCount > 0) {
-    if (imagesWithoutAlt > 0) {
-      score -= 10;
-      messages.push(`${imagesWithoutAlt} images missing alt text.`);
-    } else {
-      messages.push("All images appear to have alt text.");
-    }
-
-    const badRatio = imageBadFilenameCount / imageCount;
-    if (imageBadFilenameCount > 0) {
-      if (badRatio > 0.5) {
-        score -= 10;
-        messages.push(
-          `${imageBadFilenameCount} image filenames look auto-generated (IMG_1234, DSC_0001, etc.).`
-        );
-      } else if (badRatio > 0.2) {
-        score -= 5;
-        messages.push(
-          "Some image filenames look auto-generated; consider renaming hero or key images."
-        );
-      } else {
-        messages.push(
-          "Most image filenames look descriptive and not auto-generated."
-        );
-      }
-    } else {
-      messages.push("Image filenames look descriptive.");
-    }
-  } else {
-    messages.push("No images detected on the page.");
-  }
-
-  if (!hasFavicon) {
-    score -= 5;
-    messages.push("No favicon found.");
-  }
-
-  if (!hasCanonical) {
-    score -= 5;
-    messages.push("No canonical tag found.");
-  }
-
-  if (robotsContent && /noindex/i.test(robotsContent)) {
-    score -= 20;
-    messages.push("Page is marked noindex in meta robots.");
-  }
-
-  return {
-    score: Math.max(0, score),
-    details: {
-      h1Count,
-      h1Texts,
-      robotsContent,
-      wordCount,
-      bodyText,
-      imageCount,
-      imagesWithoutAlt,
-      hasFavicon,
-      hasCanonical,
-      detectedTitle,
-      totalLinks,
-      internalLinks,
-      externalLinks,
-      nofollowLinks,
-      imageBadFilenameCount,
-      imageGoodFilenameCount,
-    },
-    messages,
-  };
-};
+type TabType = "home" | "pricing" | "about";
 
 export default function Home() {
-  // Location data (multi-select states)
-  const [states, setStates] = useState<any[]>([]);
-  const [selectedStates, setSelectedStates] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<TabType>("home");
+  const [urlInput, setUrlInput] = useState("");
+  const router = useRouter();
 
-  // URL & scraping
-  const [targetUrl, setTargetUrl] = useState("");
-  const [scrapedUrl, setScrapedUrl] = useState<string | null>(null);
-  const [httpStatus, setHttpStatus] = useState<number | null>(null);
-  const [robotsTxt, setRobotsTxt] = useState<string | null>(null);
-  const [robotsStatus, setRobotsStatus] = useState<number | null>(null);
-  const [sitemapXml, setSitemapXml] = useState<string | null>(null);
-  const [sitemapStatus, setSitemapStatus] = useState<number | null>(null);
-  const [isScraping, setIsScraping] = useState(false);
-  const [scrapeError, setScrapeError] = useState<string | null>(null);
-
-  // Page content
-  const [pageContent, setPageContent] = useState("");
-  const [extractedKeywords, setExtractedKeywords] = useState<string[]>([]);
-  const [titleTag, setTitleTag] = useState("");
-  const [gradeResult, setGradeResult] = useState<GradeResult | null>(null);
-  const [pageHtml, setPageHtml] = useState("");
-  const [technicalResult, setTechnicalResult] =
-    useState<TechnicalResult | null>(null);
-
-  // Load states via API (no more <!DOCTYPE JSON issues)
-  useEffect(() => {
-    const loadStates = async () => {
-      try {
-        const res = await fetch("/api/states");
-        const json = await res.json();
-        setStates(json || []);
-      } catch (err) {
-        console.error("Failed to load states:", err);
-        setStates([]);
-      }
-    };
-    loadStates();
-  }, []);
-
-  const handleCheckSeo = async () => {
-    const url = targetUrl.trim();
-    if (!url) {
-      setScrapeError("Please enter a URL.");
+  const handleUrlSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const trimmedUrl = urlInput.trim();
+    if (!trimmedUrl) {
       return;
     }
 
-    setIsScraping(true);
-    setScrapeError(null);
-
     try {
-      const res = await fetch(
-        `/api/scrape?url=${encodeURIComponent(url)}`
-      );
-      const data = await res.json();
+      // POST to /api/audit to create job
+      const response = await fetch("/api/audit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: trimmedUrl }),
+      });
 
-      if (!data.success) {
-        setScrapeError(data.error || "Failed to scrape URL.");
-        setIsScraping(false);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Error creating audit job:", errorData);
+        alert(errorData.error || "Failed to create audit job. Please try again.");
         return;
       }
 
-      const html: string = data.html || "";
-      const finalUrl: string = data.finalUrl || url;
-
-      setScrapedUrl(finalUrl);
-      setHttpStatus(data.status ?? null);
-      setRobotsTxt(data.robotsTxt ?? null);
-      setRobotsStatus(data.robotsStatus ?? null);
-      setSitemapXml(data.sitemapXml ?? null);
-      setSitemapStatus(data.sitemapStatus ?? null);
-
-      setPageHtml(html);
-      const tech = analyzeHtml(html, finalUrl);
-      setTechnicalResult(tech);
-
-      const bodyText = tech.details.bodyText;
-      const autoKeywords = extractKeywords(bodyText);
-      setPageContent(bodyText);
-      setExtractedKeywords(autoKeywords);
-
-      const detectedTitle = tech.details.detectedTitle || "";
-      setTitleTag(detectedTitle);
-
-      const titleGrade = computeTitleGrade(
-        detectedTitle,
-        selectedStates,
-        autoKeywords,
-        states
-      );
-      setGradeResult(titleGrade);
-    } catch (err: any) {
-      setScrapeError(err?.message || "Unknown error while scraping.");
-    } finally {
-      setIsScraping(false);
-    }
-  };
-
-  const handleManualTitleGrade = () => {
-    const result = computeTitleGrade(
-      titleTag,
-      selectedStates,
-      extractedKeywords,
-      states
-    );
-    setGradeResult(result);
-  };
-
-  const handleManualTechnicalAudit = () => {
-    if (!pageHtml) {
-      setTechnicalResult(null);
-      return;
-    }
-    const result = analyzeHtml(pageHtml, scrapedUrl || undefined);
-    setTechnicalResult(result);
-  };
-
-  // Overall /10 score (title + tech)
-  let overallScore10: number | null = null;
-  if (gradeResult && technicalResult) {
-    const normalizedTitle = gradeResult.score / 100;
-    const normalizedTech = technicalResult.score / 100;
-    overallScore10 = Math.round(((normalizedTitle + normalizedTech) / 2) * 10);
-  }
-
-  // Suggestions
-  const suggestions: string[] = [];
-  if (technicalResult) {
-    const d = technicalResult.details;
-    if (d.wordCount < 300) {
-      suggestions.push("Increase page content to at least 300 words.");
-    }
-    if (d.h1Count === 0) {
-      suggestions.push("Add an H1 that clearly describes the main topic.");
-    } else if (d.h1Count > 1) {
-      suggestions.push("Reduce to a single primary H1 for clarity.");
-    }
-    if (!d.hasFavicon) {
-      suggestions.push("Add a favicon for better branding and UX.");
-    }
-    if (!d.hasCanonical) {
-      suggestions.push(
-        "Add a canonical tag to avoid duplicate content issues."
-      );
-    }
-    if (!d.robotsContent) {
-      suggestions.push(
-        "Consider adding a meta robots tag if you need finer index control."
-      );
-    } else if (/noindex/i.test(d.robotsContent)) {
-      suggestions.push(
-        "Remove 'noindex' from meta robots if this page should appear in search results."
-      );
-    }
-    if (d.imageCount > 0 && d.imagesWithoutAlt > 0) {
-      suggestions.push(
-        "Add descriptive alt text to images for accessibility and SEO."
-      );
-    }
-    if (d.imageBadFilenameCount > 0) {
-      suggestions.push(
-        "Rename images with auto-generated names (IMG_1234, DSC_0001, etc.) to descriptive filenames with keywords."
-      );
-    }
-  }
-
-  if (!robotsTxt || (robotsStatus !== null && robotsStatus >= 400)) {
-    suggestions.push("Add a robots.txt file to guide search engines.");
-  }
-
-  if (!sitemapXml || (sitemapStatus !== null && sitemapStatus >= 400)) {
-    suggestions.push("Add a sitemap.xml file to help indexing.");
-  }
-
-  if (gradeResult) {
-    const tag = titleTag.toLowerCase();
-    // We only suggest this if user hasn't explicitly selected states that already match
-    if (selectedStates.length > 0) {
-      const selectedLabels: string[] = [];
-      selectedStates.forEach((abbr) => {
-        const found = states.find((s) => s.abbr === abbr);
-        if (found) {
-          selectedLabels.push(found.name, found.abbr);
-        }
-      });
-      const anyInTitle = selectedLabels.some((label) =>
-        tag.includes(label.toLowerCase())
-      );
-      if (!anyInTitle) {
-        suggestions.push(
-          "Include at least one of your selected states in the title tag for local SEO."
-        );
+      const { jobId } = await response.json();
+      if (!jobId) {
+        console.error("No jobId returned from API");
+        alert("Failed to create audit job. Please try again.");
+        return;
       }
-    } else {
-      suggestions.push(
-        "Include your target city/county/state in the title tag for local SEO."
-      );
+
+      // Redirect to report page with jobId
+      const reportUrl = `/report?jobId=${encodeURIComponent(jobId)}`;
+      console.log("Navigating to:", reportUrl);
+      router.push(reportUrl);
+    } catch (err: any) {
+      console.error("Error submitting URL:", err);
+      alert("An error occurred. Please try again.");
     }
-
-    const bizWords = [
-      "roofing",
-      "contractor",
-      "remodeling",
-      "kitchen",
-      "bath",
-      "siding",
-      "windows",
-      "builder",
-      "home improvement",
-      "plumbing",
-      "hvac",
-      "heating",
-      "cooling",
-      "construction",
-    ];
-    const hasBiz = bizWords.some((kw) => tag.includes(kw));
-    if (!hasBiz) {
-      suggestions.push(
-        "Add a clear service keyword (e.g., 'roofing', 'remodeling', 'contractor') to the title tag."
-      );
-    }
-
-    if (titleTag && (titleTag.length < 30 || titleTag.length > 65)) {
-      suggestions.push(
-        "Adjust title length to stay within 30–65 characters for best display."
-      );
-    }
-  }
-
-  const uniqueSuggestions = Array.from(new Set(suggestions));
-
-  // Status levels for dots
-  const wordStatus: StatusLevel =
-    technicalResult && technicalResult.details.wordCount >= 400
-      ? "good"
-      : technicalResult && technicalResult.details.wordCount >= 300
-      ? "warn"
-      : "bad";
-
-  const hasH1Status: StatusLevel =
-    technicalResult && technicalResult.details.h1Count === 1
-      ? "good"
-      : technicalResult && technicalResult.details.h1Count > 1
-      ? "warn"
-      : "bad";
-
-  const faviconStatus: StatusLevel =
-    technicalResult && technicalResult.details.hasFavicon ? "good" : "bad";
-
-  const canonicalStatus: StatusLevel =
-    technicalResult && technicalResult.details.hasCanonical ? "good" : "bad";
-
-  const robotsFileStatus: StatusLevel =
-    robotsTxt && robotsStatus !== null && robotsStatus < 400 ? "good" : "bad";
-
-  const sitemapFileStatus: StatusLevel =
-    sitemapXml && sitemapStatus !== null && sitemapStatus < 400
-      ? "good"
-      : "bad";
-
-  const altStatus: StatusLevel =
-    technicalResult && technicalResult.details.imageCount > 0
-      ? (() => {
-          const d = technicalResult.details;
-          const coverage =
-            d.imageCount === 0
-              ? 1
-              : (d.imageCount - d.imagesWithoutAlt) / d.imageCount;
-          if (coverage >= 0.9) return "good";
-          if (coverage >= 0.5) return "warn";
-          return "bad";
-        })()
-      : "warn";
-
-  const filenameStatus: StatusLevel =
-    technicalResult && technicalResult.details.imageCount > 0
-      ? (() => {
-          const d = technicalResult.details;
-          const badRatio =
-            d.imageCount === 0 ? 0 : d.imageBadFilenameCount / d.imageCount;
-          if (badRatio === 0) return "good";
-          if (badRatio <= 0.3) return "warn";
-          return "bad";
-        })()
-      : "warn";
-
-  const titleQualityStatus: StatusLevel =
-    gradeResult && gradeResult.score >= 80
-      ? "good"
-      : gradeResult && gradeResult.score >= 50
-      ? "warn"
-      : "bad";
+  };
 
   return (
-    <div className="min-h-screen bg-zinc-100 text-zinc-900">
-      <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
+    <div className="min-h-screen bg-zinc-900 text-white relative overflow-hidden">
+      {/* Geometric pattern background */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,0.05) 35px, rgba(255,255,255,0.05) 70px)`,
+        }}></div>
+      </div>
+
+      <div className="relative z-10">
         {/* Header */}
-        <header className="space-y-2">
-          <h1 className="text-3xl sm:text-4xl font-bold">
-            Tri-Two SEO Grader
-          </h1>
-          <p className="text-sm text-zinc-600">
-            Paste a URL, optionally set your target location, and get a quick
-            SEO health check with a 10-point score.
-          </p>
+        <header className="flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
+          {/* Logo */}
+          <div className="flex items-center gap-4">
+            <span className="text-white text-6xl font-bold italic font-serif">TRI</span>
+            <div className="relative w-64 h-64">
+              {/* Three overlapping circles with outlined 2s - 4x size */}
+              {/* Top-left circle (deep red/clay) - orange "2" */}
+              <div className="absolute top-0 -left-[5px] w-40 h-40 bg-[#8B3A2E] rounded-full flex items-center justify-center z-20 shadow-lg">
+                <span 
+                  className="font-bold text-[5.625rem] leading-none"
+                  style={{ 
+                    WebkitTextStroke: '6px #D17130',
+                    WebkitTextFillColor: 'transparent',
+                    color: 'transparent',
+                    fontFamily: 'sans-serif'
+                  } as React.CSSProperties}
+                >2</span>
+              </div>
+              {/* Top-right circle (burnt orange) - green/teal "2" */}
+              <div className="absolute top-0 -right-[5px] w-40 h-40 bg-[#D17130] rounded-full flex items-center justify-center z-20 shadow-lg">
+                <span 
+                  className="font-bold text-[5.625rem] leading-none"
+                  style={{ 
+                    WebkitTextStroke: '6px #546D75',
+                    WebkitTextFillColor: 'transparent',
+                    color: 'transparent',
+                    fontFamily: 'sans-serif'
+                  } as React.CSSProperties}
+                >2</span>
+              </div>
+              {/* Bottom-center circle (slate blue-grey) - red "2" */}
+              <div className="absolute -bottom-[10px] left-1/2 transform -translate-x-1/2 w-40 h-40 bg-[#546D75] rounded-full flex items-center justify-center z-10 shadow-lg">
+                <span 
+                  className="font-bold text-[5.625rem] leading-none"
+                  style={{ 
+                    WebkitTextStroke: '6px #8B3A2E',
+                    WebkitTextFillColor: 'transparent',
+                    color: 'transparent',
+                    fontFamily: 'sans-serif'
+                  } as React.CSSProperties}
+                >2</span>
+              </div>
+            </div>
+            <span className="text-white text-6xl font-bold italic font-serif">TWO</span>
+          </div>
+
+          {/* Tab Navigation */}
+          <nav className="flex items-center gap-4 md:gap-6">
+            <button
+              onClick={() => setActiveTab("home")}
+              className={`px-4 py-2 text-5xl font-medium transition ${
+                activeTab === "home"
+                  ? "text-white border-b-2 border-teal-500"
+                  : "text-gray-400 hover:text-gray-300"
+              }`}
+            >
+              Home
+            </button>
+            <button
+              onClick={() => setActiveTab("pricing")}
+              className={`px-4 py-2 text-5xl font-medium transition ${
+                activeTab === "pricing"
+                  ? "text-white border-b-2 border-teal-500"
+                  : "text-gray-400 hover:text-gray-300"
+              }`}
+            >
+              Pricing
+            </button>
+            <button
+              onClick={() => setActiveTab("about")}
+              className={`px-4 py-2 text-5xl font-medium transition ${
+                activeTab === "about"
+                  ? "text-white border-b-2 border-teal-500"
+                  : "text-gray-400 hover:text-gray-300"
+              }`}
+            >
+              About
+            </button>
+          </nav>
         </header>
 
-        {/* URL + Scan Mode */}
-        <section className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-4 sm:p-6 space-y-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3 text-sm">
-              <span className="font-medium">Scan Type:</span>
-              <label className="flex items-center gap-1">
-                <input type="radio" checked readOnly />
-                <span>Free Scan</span>
-              </label>
-              <label className="flex items-center gap-1 opacity-50">
-                <input type="radio" disabled />
-                <span>Advanced Scan (coming soon)</span>
-              </label>
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              className="flex-1 border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-zinc-900"
-              placeholder="https://www.example.com/"
-              value={targetUrl}
-              onChange={(e) => setTargetUrl(e.target.value)}
-            />
-            <button
-              className="px-5 py-2 rounded-lg bg-black text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-60"
-              onClick={handleCheckSeo}
-              disabled={isScraping}
-            >
-              {isScraping ? "Checking..." : "Check SEO"}
-            </button>
-          </div>
-          {scrapeError && <p className="text-sm text-red-600">{scrapeError}</p>}
-          {(scrapedUrl || httpStatus !== null) && (
-            <p className="text-xs text-zinc-500">
-              {scrapedUrl && (
-                <>
-                  <strong>Final URL:</strong> {scrapedUrl}{" "}
-                </>
-              )}
-              {httpStatus !== null && (
-                <>
-                  · <strong>Status:</strong> {httpStatus}
-                </>
-              )}
-            </p>
-          )}
-        </section>
+        {/* Main Content - Tab-based */}
+        <main className="min-h-[calc(100vh-200px)] px-6 py-12">
+          {activeTab === "home" && (
+            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-300px)]">
+              <div className="text-center space-y-6 max-w-4xl">
+                {/* Main Heading */}
+                <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
+                  EMPOWER YOUR SEO
+                </h1>
 
-        {/* Main grid: detail cards + score/suggestions */}
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr),minmax(0,1fr)]">
-          {/* LEFT COLUMN */}
-          <div className="space-y-6">
-            {/* Location Targeting (multi-select states) */}
-            <section className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-4 sm:p-5 space-y-3">
-              <h2 className="text-lg font-semibold">Location Targeting</h2>
-              <p className="text-xs text-zinc-500">
-                Optional: select one or more states so we can judge the title's
-                local relevance.
-              </p>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">States</label>
-                <select
-                  multiple
-                  className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm bg-white text-zinc-900 h-40 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  value={selectedStates}
-                  onChange={(e) => {
-                    const values = Array.from(
-                      e.target.selectedOptions,
-                      (opt) => (opt as HTMLOptionElement).value
-                    );
-                    setSelectedStates(values);
-                  }}
-                >
-                  {states.length === 0 ? (
-                    <option>Loading states...</option>
-                  ) : (
-                    states.map((s, i) => (
-                      <option key={i} value={s.abbr}>
-                        {s.name} ({s.abbr})
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-            </section>
+                {/* Subheading */}
+                <p className="text-xl md:text-2xl text-gray-300">
+                  CLARITY. CONFIDENCE. CONTROL.
+                </p>
 
-            {/* Title & Meta */}
-            <section className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold">Title & Meta</h2>
-                <button
-                  className="text-xs text-emerald-700 hover:underline"
-                  onClick={handleManualTitleGrade}
-                >
-                  Re-grade title
-                </button>
-              </div>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <div className="font-medium mb-1">Title Tag</div>
+                {/* URL Input Section */}
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleUrlSubmit(e);
+                }} className="flex flex-col sm:flex-row gap-4 mt-12 max-w-2xl mx-auto" noValidate>
                   <input
-                    className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    value={titleTag}
-                    onChange={(e) => setTitleTag(e.target.value)}
-                    placeholder="Page title will appear here after scan, or type one manually..."
+                    type="text"
+                    placeholder="Enter your URL here..."
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleUrlSubmit(e);
+                      }
+                    }}
+                    className="flex-1 px-6 py-4 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   />
-                  {gradeResult && (
-                    <div className="mt-1 space-y-1">
-                      <div
-                        className={`flex items-center gap-2 text-xs ${statusTextClass[titleQualityStatus]}`}
-                      >
-                        <span
-                          className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[titleQualityStatus]}`}
-                        />
-                        <span>
-                          {titleQualityStatus === "good"
-                            ? "Title quality: Strong"
-                            : titleQualityStatus === "warn"
-                            ? "Title quality: Needs minor improvements"
-                            : "Title quality: Needs work"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-600">
-                        {gradeResult.message}
-                      </p>
+                  <button
+                    type="button"
+                    onClick={handleUrlSubmit}
+                    className="px-8 py-4 bg-[#8B4513] hover:bg-[#A0522D] text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Free
+                  </button>
+                </form>
+              </div>
+
+              {/* Pricing / Tier Section */}
+              <div className="mt-16 w-full max-w-6xl mx-auto">
+                <div className="flex flex-col md:flex-row gap-4">
+                  {/* Left Card - Red */}
+                  <div className="flex-1 bg-red-500 rounded-lg p-6 flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold">$299 Base</div>
+                      <div className="text-red-100 text-sm">$299 Check</div>
                     </div>
-                  )}
+                    <div className="w-10 h-10 text-white">
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+                        <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29l1.5-1.5C4.17 14.3 4 13.18 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8c0 1.18-.17 2.3-.47 3.29l1.5 1.5C21.64 14.98 22 13.54 22 12c0-5.52-4.48-10-10-10zm0 18c-1.38 0-2.63-.56-3.54-1.46L12 17l3.54 1.54C14.63 19.44 13.38 20 12 20z"/>
+                        <circle cx="9" cy="12" r="1.5"/>
+                        <circle cx="15" cy="12" r="1.5"/>
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Middle Card - Orange */}
+                  <div className="flex-1 bg-orange-500 rounded-lg p-6 flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold">$499 Pro Tier</div>
+                      <div className="text-orange-100 text-sm">Deep Analysis</div>
+                    </div>
+                  </div>
+
+                  {/* Right Card - Teal */}
+                  <div className="flex-1 bg-teal-500 rounded-lg p-6 flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold">$899 Enterprise</div>
+                      <div className="text-teal-100 text-sm">Custom Solutions</div>
+                    </div>
+                    <div className="w-10 h-10 text-white">
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+                        <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+                        <rect x="6" y="8" width="2" height="2" fill="currentColor"/>
+                        <rect x="6" y="11" width="2" height="2" fill="currentColor"/>
+                        <rect x="6" y="14" width="2" height="2" fill="currentColor"/>
+                        <rect x="16" y="8" width="2" height="2" fill="currentColor"/>
+                        <rect x="16" y="11" width="2" height="2" fill="currentColor"/>
+                        <rect x="16" y="14" width="2" height="2" fill="currentColor"/>
+                      </svg>
+                    </div>
+                  </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "pricing" && (
+            <div className="max-w-6xl mx-auto space-y-8">
+              <div className="text-center">
+                <h2 className="text-4xl md:text-5xl font-bold mb-4">Choose Your Plan</h2>
+                <p className="text-xl text-gray-300">Select the perfect SEO analysis package for your needs</p>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6 mt-12">
+                {/* Base Plan */}
+                <div className="border-2 border-red-500 bg-zinc-900 rounded-lg p-8 flex flex-col">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                      UIT
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold">$299</div>
+                      <div className="text-gray-400 text-sm">Base</div>
+                    </div>
+                  </div>
+                  <ul className="space-y-4 flex-1 mb-6">
+                    <li className="flex items-start gap-2">
+                      <span className="text-teal-500 mt-1">✓</span>
+                      <span>Basic SEO audit</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-teal-500 mt-1">✓</span>
+                      <span>Title tag analysis</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-teal-500 mt-1">✓</span>
+                      <span>Meta description check</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-teal-500 mt-1">✓</span>
+                      <span>H1 tag verification</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-teal-500 mt-1">✓</span>
+                      <span>Word count analysis</span>
+                    </li>
+                  </ul>
+                  <button className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors">
+                    Get Started
+                  </button>
+                </div>
+
+                {/* Pro Plan */}
+                <div className="bg-orange-500 rounded-lg p-8 flex flex-col">
+                  <div className="mb-6">
+                    <div className="text-3xl font-bold mb-2">$499</div>
+                    <div className="text-orange-100 text-sm">Pro Tier</div>
+                    <div className="text-orange-200 text-xs mt-1">Deep Analysis</div>
+                  </div>
+                  <ul className="space-y-4 flex-1 mb-6">
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Everything in Base</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Advanced technical audit</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Image optimization analysis</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Link structure review</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Priority support</span>
+                    </li>
+                  </ul>
+                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-orange-500 font-semibold rounded-lg transition-colors">
+                    Get Started
+                  </button>
+                </div>
+
+                {/* Enterprise Plan */}
+                <div className="bg-teal-500 rounded-lg p-8 flex flex-col">
+                  <div className="mb-6">
+                    <div className="text-3xl font-bold mb-2">$899</div>
+                    <div className="text-teal-100 text-sm">Enterprise</div>
+                    <div className="text-teal-200 text-xs mt-1">Custom Solutions</div>
+                  </div>
+                  <ul className="space-y-4 flex-1 mb-6">
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Everything in Pro</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Custom reporting</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Multi-page analysis</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Dedicated account manager</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-white mt-1">✓</span>
+                      <span>Ongoing monitoring</span>
+                    </li>
+                  </ul>
+                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-teal-500 font-semibold rounded-lg transition-colors">
+                    Contact Sales
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "about" && (
+            <div className="max-w-4xl mx-auto space-y-8">
+              <div className="text-center">
+                <h2 className="text-4xl md:text-5xl font-bold mb-4">About Tri-Two SEO</h2>
+                <p className="text-xl text-gray-300">Empowering businesses with clarity, confidence, and control</p>
+              </div>
+
+              <div className="space-y-6 text-gray-300">
                 <div>
-                  <div className="font-medium mb-1">Meta Description</div>
-                  {technicalResult ? (
-                    (() => {
-                      const parsed = new DOMParser().parseFromString(
-                        pageHtml || "<html></html>",
-                        "text/html"
-                      );
-                      const descMeta = parsed.querySelector(
-                        "meta[name='description']"
-                      );
-                      const content = descMeta?.getAttribute("content") || "";
-                      const hasDesc = content.trim().length > 0;
-                      const level: StatusLevel = hasDesc ? "good" : "bad";
-                      return (
-                        <div
-                          className={`flex items-center gap-2 ${statusTextClass[level]}`}
-                        >
-                          <span
-                            className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[level]}`}
-                          />
-                          <span>
-                            {hasDesc ? content : "No meta description found."}
-                          </span>
-                        </div>
-                      );
-                    })()
-                  ) : (
-                    <p className="text-xs text-zinc-500">
-                      Run a scan to detect meta description.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* Content & Semantics (word count only) */}
-            <section className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-4 sm:p-5 space-y-4">
-              <h2 className="text-lg font-semibold">Content & Semantics</h2>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <div className="font-medium">Word Count</div>
-                  <div
-                    className={`flex items-center gap-2 ${statusTextClass[wordStatus]}`}
-                  >
-                    <span
-                      className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[wordStatus]}`}
-                    />
-                    <span>
-                      {technicalResult
-                        ? technicalResult.details.wordCount
-                        : "—"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Technical Basics */}
-            <section className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold">Technical Basics</h2>
-                <button
-                  className="text-xs text-emerald-700 hover:underline"
-                  onClick={handleManualTechnicalAudit}
-                >
-                  Re-run technical audit
-                </button>
-              </div>
-              {technicalResult ? (
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">H1</span>
-                    <span
-                      className={`flex items-center gap-2 ${statusTextClass[hasH1Status]}`}
-                    >
-                      <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[hasH1Status]}`}
-                      />
-                      <span>
-                        {technicalResult.details.h1Count === 0
-                          ? "Missing"
-                          : technicalResult.details.h1Count === 1
-                          ? "1 present"
-                          : `${technicalResult.details.h1Count} H1s`}
-                      </span>
-                    </span>
-                  </div>
-                  {technicalResult.details.h1Texts.length > 0 && (
-                    <ul className="list-disc list-inside text-xs text-zinc-700">
-                      {technicalResult.details.h1Texts.map((h, i) => (
-                        <li key={i}>{h}</li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Favicon</span>
-                    <span
-                      className={`flex items-center gap-2 ${statusTextClass[faviconStatus]}`}
-                    >
-                      <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[faviconStatus]}`}
-                      />
-                      <span>
-                        {technicalResult.details.hasFavicon
-                          ? "Present"
-                          : "Missing"}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Canonical Tag</span>
-                    <span
-                      className={`flex items-center gap-2 ${statusTextClass[canonicalStatus]}`}
-                    >
-                      <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[canonicalStatus]}`}
-                      />
-                      <span>
-                        {technicalResult.details.hasCanonical
-                          ? "Present"
-                          : "Missing"}
-                      </span>
-                    </span>
-                  </div>
-                  <div>
-                    <div className="font-medium mb-1">Links</div>
-                    <p className="text-xs text-zinc-700">
-                      {technicalResult.details.totalLinks} total ·{" "}
-                      {technicalResult.details.internalLinks} internal ·{" "}
-                      {technicalResult.details.externalLinks} external ·{" "}
-                      {technicalResult.details.nofollowLinks} nofollow
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-zinc-500">
-                  Run a scan to see technical details.
-                </p>
-              )}
-            </section>
-
-            {/* Image Optimization */}
-            <section className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-4 sm:p-5 space-y-4">
-              <h2 className="text-lg font-semibold">Image Optimization</h2>
-              {technicalResult ? (
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Alt Text Coverage</span>
-                    <span
-                      className={`flex items-center gap-2 ${statusTextClass[altStatus]}`}
-                    >
-                      <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[altStatus]}`}
-                      />
-                      <span>
-                        {technicalResult.details.imageCount === 0
-                          ? "No images"
-                          : `${technicalResult.details.imageCount - technicalResult.details.imagesWithoutAlt} / ${technicalResult.details.imageCount} images have alt text`}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Filename Quality</span>
-                    <span
-                      className={`flex items-center gap-2 ${statusTextClass[filenameStatus]}`}
-                    >
-                      <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[filenameStatus]}`}
-                      />
-                      <span>
-                        {technicalResult.details.imageCount === 0
-                          ? "No images"
-                          : technicalResult.details.imageBadFilenameCount === 0
-                          ? "All filenames look descriptive"
-                          : `${technicalResult.details.imageBadFilenameCount} / ${technicalResult.details.imageCount} look auto-generated`}
-                      </span>
-                    </span>
-                  </div>
-                  <div>
-                    <div className="font-medium mb-1">Image Count</div>
-                    <p className="text-xs text-zinc-700">
-                      {technicalResult.details.imageCount} total images on the
-                      page.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-zinc-500">
-                  Run a scan to see image optimization metrics.
-                </p>
-              )}
-            </section>
-
-            {/* Crawling & Indexing */}
-            <section className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-4 sm:p-5 space-y-4">
-              <h2 className="text-lg font-semibold">Crawling & Indexing</h2>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">robots.txt</span>
-                  <span
-                    className={`flex items-center gap-2 ${statusTextClass[robotsFileStatus]}`}
-                  >
-                    <span
-                      className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[robotsFileStatus]}`}
-                    />
-                    <span>
-                      {robotsTxt && robotsStatus !== null && robotsStatus < 400
-                        ? "Found"
-                        : "Not found"}
-                    </span>
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">sitemap.xml</span>
-                  <span
-                    className={`flex items-center gap-2 ${statusTextClass[sitemapFileStatus]}`}
-                  >
-                    <span
-                      className={`inline-block h-2.5 w-2.5 rounded-full ${statusDotClass[sitemapFileStatus]}`}
-                    />
-                    <span>
-                      {sitemapXml &&
-                      sitemapStatus !== null &&
-                      sitemapStatus < 400
-                        ? "Found"
-                        : "Not found"}
-                    </span>
-                  </span>
-                </div>
-                {technicalResult && (
-                  <div className="text-xs text-zinc-600">
-                    <div className="font-medium mb-1">Meta Robots</div>
-                    <p>
-                      {technicalResult.details.robotsContent
-                        ? technicalResult.details.robotsContent
-                        : "No meta robots tag detected."}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-
-          {/* RIGHT COLUMN: Overall score + suggestions */}
-          <div className="space-y-6">
-            {/* Overall Score */}
-            <section className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-5 space-y-3">
-              <h2 className="text-lg font-semibold">Overall Score</h2>
-              {overallScore10 !== null ? (
-                <>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold">
-                      {overallScore10}
-                      <span className="text-lg text-zinc-500">/10</span>
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-600">
-                    This score combines title relevance and technical health.
+                  <h3 className="text-2xl font-bold text-white mb-3">Our Mission</h3>
+                  <p className="leading-relaxed">
+                    At Tri-Two SEO, we believe that every business deserves to understand and optimize their online presence. 
+                    Our mission is to provide clear, actionable insights that help you take control of your SEO strategy.
                   </p>
-                </>
-              ) : (
-                <p className="text-sm text-zinc-500">
-                  Run a scan to see a 10-point score.
-                </p>
-              )}
-            </section>
+                </div>
 
-            {/* Suggestions */}
-            <section className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-5 space-y-3">
-              <h2 className="text-lg font-semibold">Suggestions</h2>
-              {uniqueSuggestions.length > 0 ? (
-                <ul className="list-disc list-inside text-sm text-zinc-700 space-y-1">
-                  {uniqueSuggestions.map((s, i) => (
-                    <li key={i}>{s}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-zinc-500">
-                  Run a scan to see specific recommendations.
-                </p>
-              )}
-            </section>
-          </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white mb-3">What We Do</h3>
+                  <p className="leading-relaxed">
+                    We offer comprehensive SEO auditing tools that analyze your website's technical SEO, content quality, 
+                    and optimization opportunities. From basic checks to deep analysis, we provide the insights you need 
+                    to improve your search engine rankings.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-2xl font-bold text-white mb-3">Why Choose Us</h3>
+                  <ul className="space-y-2 list-disc list-inside">
+                    <li>Comprehensive SEO analysis covering all critical factors</li>
+                    <li>Clear, actionable recommendations</li>
+                    <li>Fast and accurate results</li>
+                    <li>Transparent pricing with no hidden fees</li>
+                    <li>Expert support when you need it</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* Bottom-right star icon */}
+        <div className="absolute bottom-4 right-4 w-6 h-6 text-white opacity-30">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+          </svg>
         </div>
-
-        {/* CTA */}
-        <section className="bg-emerald-600 text-white rounded-2xl shadow-sm p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
-          <div>
-            <h2 className="text-xl font-semibold">
-              Ready to level up your SEO?
-            </h2>
-            <p className="text-sm text-emerald-100 mt-1">
-              Schedule a free consultation and we'll walk through your results
-              and next steps together.
-            </p>
-          </div>
-          <a
-            href="/contact"
-            className="inline-flex items-center justify-center px-5 py-2.5 rounded-full bg-white text-emerald-700 text-sm font-medium hover:bg-emerald-50"
-          >
-            Schedule A Free Consultation
-          </a>
-        </section>
       </div>
     </div>
   );
 }
+

@@ -1,0 +1,76 @@
+{
+  "statusBuckets": {
+    "goodMin": 80,
+    "warnMin": 50
+  },
+  "title": {
+    "weights": {
+      "locality": 25,
+      "serviceKeyword": 25,
+      "semantic": 20,
+      "length": 15,
+      "separator": 10,
+      "presence": 5
+    },
+    "length": {
+      "idealMin": 30,
+      "idealMax": 65,
+      "softMin": 20,
+      "softMax": 75
+    },
+    "serviceKeywordsStrong": [
+      "roofing",
+      "roofer",
+      "remodeling",
+      "remodeler",
+      "contractor",
+      "construction",
+      "builder",
+      "plumbing",
+      "plumber",
+      "hvac",
+      "heating",
+      "cooling",
+      "air conditioning",
+      "electrician",
+      "siding",
+      "windows",
+      "kitchen",
+      "bathroom",
+      "bath",
+      "home improvement"
+    ],
+    "serviceKeywordsWeak": [
+      "services",
+      "company",
+      "solutions",
+      "experts",
+      "team"
+    ],
+    "semantic": {
+      "minExactOverlap": 1,
+      "minFuzzyOverlap": 1
+    },
+    "structure": {
+      "separators": ["|", "-", "–"]
+    }
+  },
+  "media": {
+    "weights": {
+      "altCoverage": 40,
+      "filenameQuality": 30,
+      "metadata": 20,
+      "imageCount": 10
+    },
+    "altCoverageThresholds": {
+      "green": 0.9,
+      "yellow": 0.5
+    },
+    "badFilenameYellowMaxRatio": 0.3,
+    "imageCount": {
+      "greenMin": 3,
+      "yellowMin": 1
+    }
+  }
+}
+

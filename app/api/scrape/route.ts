@@ -29,17 +29,36 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const pageRes = await fetch(parsed.toString(), {
-      method: "GET",
-      redirect: "follow",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      cache: "no-store",
-    });
+    // Fetch main page with timeout
+    const FETCH_TIMEOUT = 10000; // 10 seconds
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+    let pageRes: Response;
+    try {
+      pageRes = await fetch(parsed.toString(), {
+        method: "GET",
+        redirect: "follow",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === "AbortError") {
+        return NextResponse.json(
+          { success: false, error: "Request timeout - the website took too long to respond" },
+          { status: 408 }
+        );
+      }
+      throw error;
+    }
 
     const html = await pageRes.text();
     const finalUrl = pageRes.url;
@@ -48,9 +67,13 @@ export async function GET(req: NextRequest) {
 
     const origin = new URL(finalUrl || targetUrl).origin;
 
+    // Fetch robots.txt and sitemap.xml with shorter timeouts (non-blocking)
+    const ROBOTS_TIMEOUT = 3000; // 3 seconds
     let robotsTxt: string | null = null;
     let robotsStatus: number | null = null;
     try {
+      const robotsController = new AbortController();
+      const robotsTimeout = setTimeout(() => robotsController.abort(), ROBOTS_TIMEOUT);
       const robotsRes = await fetch(origin + "/robots.txt", {
         method: "GET",
         redirect: "follow",
@@ -60,7 +83,9 @@ export async function GET(req: NextRequest) {
           Accept: "text/plain,*/*;q=0.8",
         },
         cache: "no-store",
+        signal: robotsController.signal,
       });
+      clearTimeout(robotsTimeout);
       robotsStatus = robotsRes.status;
       if (robotsRes.ok) {
         robotsTxt = await robotsRes.text();
@@ -73,6 +98,8 @@ export async function GET(req: NextRequest) {
     let sitemapXml: string | null = null;
     let sitemapStatus: number | null = null;
     try {
+      const sitemapController = new AbortController();
+      const sitemapTimeout = setTimeout(() => sitemapController.abort(), ROBOTS_TIMEOUT);
       const sitemapRes = await fetch(origin + "/sitemap.xml", {
         method: "GET",
         redirect: "follow",
@@ -82,7 +109,9 @@ export async function GET(req: NextRequest) {
           Accept: "application/xml,text/xml,*/*;q=0.8",
         },
         cache: "no-store",
+        signal: sitemapController.signal,
       });
+      clearTimeout(sitemapTimeout);
       sitemapStatus = sitemapRes.status;
       if (sitemapRes.ok) {
         sitemapXml = await sitemapRes.text();

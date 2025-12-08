@@ -42,7 +42,7 @@ type AIMetrics = {
 function ReportPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const url = searchParams.get("url") || "";
+  const jobId = searchParams.get("jobId") || "";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [auditData, setAuditData] = useState<AuditData | null>(null);
@@ -51,11 +51,13 @@ function ReportPageContent() {
   const [states, setStates] = useState<any[]>([]);
   const [aiMetrics, setAiMetrics] = useState<AIMetrics | null>(null);
   const [mediaMetrics, setMediaMetrics] = useState<any>(null);
+  const [jobStatus, setJobStatus] = useState<string>("pending");
+  const [jobStage, setJobStage] = useState<number>(0);
 
   // Debug logging
   useEffect(() => {
-    console.log("ReportPageContent mounted, URL from searchParams:", url);
-  }, [url]);
+    console.log("ReportPageContent mounted, jobId from searchParams:", jobId);
+  }, [jobId]);
 
   // Helper function to truncate URL at domain extension
   const truncateUrlAtDomain = (url: string): string => {
@@ -93,100 +95,207 @@ function ReportPageContent() {
     loadStates();
   }, []);
 
+  // Poll job status every 2-3 seconds
   useEffect(() => {
-    console.log("useEffect triggered, URL:", url);
-      if (!url) {
-      console.log("No URL provided, setting error");
-        setError("No URL provided");
-        setLoading(false);
+    if (!jobId) {
+      console.log("No jobId provided, setting error");
+      setError("No job ID provided");
+      setLoading(false);
       return;
     }
 
-    const fetchAuditData = async () => {
+    let pollInterval: NodeJS.Timeout;
+    let isMounted = true;
+
+    const pollJobStatus = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        console.log("Fetching audit data for URL:", url);
-        const scrapeUrl = `/api/scrape?url=${encodeURIComponent(url)}`;
-        console.log("Calling API:", scrapeUrl);
-        
-        // Add client-side timeout (15 seconds)
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-        
-        const response = await fetch(scrapeUrl, {
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        
-        console.log("API response status:", response.status);
+        const response = await fetch(`/api/audit/${jobId}`);
         
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-          throw new Error(errorData.error || `HTTP ${response.status}`);
+          if (response.status === 404) {
+            setError("Job not found");
+            setLoading(false);
+            return;
+          }
+          throw new Error(`HTTP ${response.status}`);
         }
-        
-        const data = await response.json();
-        console.log("API response data:", data);
 
-        if (!data.success) {
-          setError(data.error || "Failed to fetch page data");
+        const job = await response.json();
+        console.log("Job status:", job.status, "Stage:", job.stage);
+
+        setJobStatus(job.status);
+        setJobStage(job.stage || 0);
+
+        if (job.status === "error") {
+          setError(job.errorMessage || "Job processing failed");
           setLoading(false);
           return;
         }
 
-        setApiData(data);
-        setFinalUrl(data.finalUrl || url);
-        const parsed = parseHTML(data.html || "", data);
-        const html = data.html || "";
-        const titleMetrics = extractTitleMetrics(parsed, html, states);
-        const extractedMediaMetrics = extractMediaMetrics(html);
-        setMediaMetrics(extractedMediaMetrics);
-        const cfg = scoringConfig as ScoringConfig;
-        const titleScores = scoreTitle(titleMetrics, cfg);
-        const mediaScores = scoreMedia(extractedMediaMetrics, cfg);
-        
-        // Extract and score AI Optimization
-        const extractedAIMetrics = extractAIMetrics(html);
-        setAiMetrics(extractedAIMetrics);
-        const aiScores = scoreAI(extractedAIMetrics);
-        
-        // Calculate technical score
-        const technicalScore = calculateTechnicalScore(parsed);
-        
-        const overallScore = Math.round(
-          (titleScores.raw * 0.45) + 
-          (mediaScores.raw * 0.20) + 
-          (technicalScore * 0.35)
-        );
-        
-        setAuditData({ 
-          ...parsed, 
-          seoScore: overallScore,
-          titleScoreRaw: titleScores.raw,
-          titleScore10: titleScores.score10,
-          titleStatus: titleScores.status,
-          mediaScoreRaw: mediaScores.raw,
-          mediaScore10: mediaScores.score10,
-          mediaStatus: mediaScores.status,
-          aiScoreRaw: aiScores.raw,
-          aiScore10: aiScores.score10,
-          aiStatus: aiScores.status,
-        });
-      } catch (err: any) {
-        console.error("Error fetching audit data:", err);
-        if (err.name === "AbortError") {
-          setError("Request timeout - the website took too long to respond. Please try again.");
-        } else {
-        setError(err?.message || "Unknown error occurred");
+        if (job.status === "done" && job.results) {
+          // Job is complete, process results
+          const results = job.results;
+          setFinalUrl(results.finalUrl || results.url || "");
+          
+          // Set API data structure for compatibility
+          setApiData({
+            success: true,
+            url: results.url,
+            finalUrl: results.finalUrl || results.url,
+            status: results.status || 200,
+            contentType: results.contentType,
+            html: results.html || "",
+            robotsTxt: results.robotsTxt,
+            robotsStatus: results.robotsStatus,
+            sitemapXml: results.sitemapXml,
+            sitemapStatus: results.sitemapStatus,
+          });
+
+          // Parse HTML if available for display
+          const html = results.html || "";
+          let parsed: any = {};
+          if (html) {
+            parsed = parseHTML(html, {
+              robotsTxt: results.robotsTxt,
+              robotsStatus: results.robotsStatus,
+              sitemapXml: results.sitemapXml,
+              sitemapStatus: results.sitemapStatus,
+            });
+          }
+
+          // Use scores from job results (already calculated server-side)
+          setAuditData({
+            ...parsed,
+            titleTag: results.titleTag || parsed.titleTag || "Title Tag",
+            metaDescription: results.metaDescription || parsed.metaDescription || "Missing",
+            metaDescriptionWordCount: results.metaDescriptionWordCount || parsed.metaDescriptionWordCount || 0,
+            h1Count: results.h1Count || parsed.h1Count || 0,
+            h1Texts: results.h1Texts || parsed.h1Texts || [],
+            wordCount: results.wordCount || parsed.wordCount || 0,
+            favicon: results.favicon !== undefined ? results.favicon : (parsed.favicon || false),
+            canonicalTag: results.canonicalTag || parsed.canonicalTag || "Missing",
+            robotsTxt: results.robotsTxtFound !== undefined ? results.robotsTxtFound : (parsed.robotsTxt || false),
+            sitemapXml: results.sitemapXmlFound !== undefined ? results.sitemapXmlFound : (parsed.sitemapXml || false),
+            altCoverage: results.altCoverage || parsed.altCoverage || "No images",
+            seoScore: results.seoScore || 0,
+            titleScoreRaw: results.titleScoreRaw || 0,
+            titleScore10: results.titleScore10 || 0,
+            titleStatus: results.titleStatus || "bad",
+            mediaScoreRaw: results.mediaScoreRaw || 0,
+            mediaScore10: results.mediaScore10 || 0,
+            mediaStatus: results.mediaStatus || "bad",
+            aiScoreRaw: results.aiScoreRaw || 0,
+            aiScore10: results.aiScore10 || 0,
+            aiStatus: results.aiStatus || "bad",
+          });
+
+          // Set metrics if available
+          if (results.mediaMetrics) {
+            setMediaMetrics(results.mediaMetrics);
+          }
+          if (results.aiMetrics) {
+            setAiMetrics(results.aiMetrics);
+          }
+
+          setLoading(false);
+          // Stop polling when done
+          if (pollInterval) {
+            clearInterval(pollInterval);
+          }
+          return;
         }
-      } finally {
-        setLoading(false);
+
+        // Job is still processing, show partial results if available
+        if (job.results && (job.status === "running" || job.status === "pending")) {
+          const results = job.results;
+          setFinalUrl(results.finalUrl || results.url || "");
+          
+          // Show partial results during processing
+          if (results.html) {
+            const html = results.html;
+            const parsed = parseHTML(html, {
+              robotsTxt: results.robotsTxt,
+              robotsStatus: results.robotsStatus,
+              sitemapXml: results.sitemapXml,
+              sitemapStatus: results.sitemapStatus,
+            });
+
+            setApiData({
+              success: true,
+              url: results.url,
+              finalUrl: results.finalUrl || results.url,
+              status: results.status || 200,
+              html: html,
+              robotsTxt: results.robotsTxt,
+              robotsStatus: results.robotsStatus,
+              sitemapXml: results.sitemapXml,
+              sitemapStatus: results.sitemapStatus,
+            });
+
+            // Show partial data if scores are available
+            if (results.seoScore !== undefined) {
+              setAuditData({
+                ...parsed,
+                titleTag: results.titleTag || parsed.titleTag || "Title Tag",
+                metaDescription: results.metaDescription || parsed.metaDescription || "Missing",
+                metaDescriptionWordCount: results.metaDescriptionWordCount || parsed.metaDescriptionWordCount || 0,
+                h1Count: results.h1Count || parsed.h1Count || 0,
+                h1Texts: results.h1Texts || parsed.h1Texts || [],
+                wordCount: results.wordCount || parsed.wordCount || 0,
+                favicon: results.favicon !== undefined ? results.favicon : (parsed.favicon || false),
+                canonicalTag: results.canonicalTag || parsed.canonicalTag || "Missing",
+                robotsTxt: results.robotsTxtFound !== undefined ? results.robotsTxtFound : (parsed.robotsTxt || false),
+                sitemapXml: results.sitemapXmlFound !== undefined ? results.sitemapXmlFound : (parsed.sitemapXml || false),
+                altCoverage: results.altCoverage || parsed.altCoverage || "No images",
+                seoScore: results.seoScore || 0,
+                titleScoreRaw: results.titleScoreRaw || 0,
+                titleScore10: results.titleScore10 || 0,
+                titleStatus: results.titleStatus || "bad",
+                mediaScoreRaw: results.mediaScoreRaw || 0,
+                mediaScore10: results.mediaScore10 || 0,
+                mediaStatus: results.mediaStatus || "bad",
+                aiScoreRaw: results.aiScoreRaw || 0,
+                aiScore10: results.aiScore10 || 0,
+                aiStatus: results.aiStatus || "bad",
+              });
+
+              if (results.mediaMetrics) {
+                setMediaMetrics(results.mediaMetrics);
+              }
+              if (results.aiMetrics) {
+                setAiMetrics(results.aiMetrics);
+              }
+            }
+          }
+        }
+
+      } catch (err: any) {
+        console.error("Error polling job status:", err);
+        if (isMounted) {
+          setError(err?.message || "Unknown error occurred");
+          setLoading(false);
+        }
       }
     };
 
-    fetchAuditData();
-  }, [url, states]);
+    // Initial poll
+    pollJobStatus();
+
+    // Set up polling interval (every 2.5 seconds)
+    pollInterval = setInterval(() => {
+      if (isMounted && jobStatus !== "done" && jobStatus !== "error") {
+        pollJobStatus();
+      }
+    }, 2500);
+
+    // Cleanup
+    return () => {
+      isMounted = false;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [jobId, jobStatus]);
 
   const parseHTML = (html: string, apiData: any): Omit<AuditData, "seoScore" | "titleScoreRaw" | "titleScore10" | "titleStatus" | "mediaScoreRaw" | "mediaScore10" | "mediaStatus" | "aiScoreRaw" | "aiScore10" | "aiStatus"> => {
     const parser = new DOMParser();
@@ -581,16 +690,30 @@ function ReportPageContent() {
     return "bg-red-500";
   };
 
-  if (loading) {
+  if (loading || (jobStatus !== "done" && jobStatus !== "error")) {
+    const stageMessages = [
+      "Initializing...",
+      "Stage 1: Fast Pass - Fetching page data...",
+      "Stage 2: Structure & Media - Analyzing content...",
+      "Stage 3: AI Optimization - Processing AI metrics...",
+    ];
+    const currentMessage = stageMessages[jobStage] || "Processing...";
+    
     return (
       <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
         <div className="text-center">
           <div className="text-2xl font-bold text-white mb-4">Loading Audit Results...</div>
-          <div className="text-gray-400 mb-4">Analyzing {url || "your website"}</div>
+          <div className="text-gray-400 mb-4">{currentMessage}</div>
           <div className="flex justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
           </div>
-          <div className="text-gray-500 text-sm mt-4">This may take up to 15 seconds...</div>
+          <div className="text-gray-500 text-sm mt-4">
+            {jobStatus === "pending" 
+              ? "Job queued, starting soon..." 
+              : jobStatus === "running"
+              ? "This may take up to 3 minutes..."
+              : "Processing..."}
+          </div>
         </div>
       </div>
     );
@@ -790,7 +913,7 @@ function ReportPageContent() {
           {/* Title and URL */}
           <div className="flex-1 ml-8">
             <h1 className="text-4xl font-bold text-white">Audit Results</h1>
-            <p className="text-3xl text-gray-400 mt-1">{truncateUrlAtDomain(finalUrl || url)}</p>
+            <p className="text-3xl text-gray-400 mt-1">{truncateUrlAtDomain(finalUrl || auditData?.url || "")}</p>
           </div>
 
           {/* SEO Score Badge */}

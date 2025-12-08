@@ -10,7 +10,7 @@ export default function Home() {
   const [urlInput, setUrlInput] = useState("");
   const router = useRouter();
 
-  const handleUrlSubmit = (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>) => {
+  const handleUrlSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -19,10 +19,39 @@ export default function Home() {
     if (!trimmedUrl) {
       return;
     }
-    const encodedUrl = encodeURIComponent(trimmedUrl);
-    const reportUrl = `/report?url=${encodedUrl}`;
-    console.log("Navigating to:", reportUrl);
-    router.push(reportUrl);
+
+    try {
+      // POST to /api/audit to create job
+      const response = await fetch("/api/audit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: trimmedUrl }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Error creating audit job:", errorData);
+        alert(errorData.error || "Failed to create audit job. Please try again.");
+        return;
+      }
+
+      const { jobId } = await response.json();
+      if (!jobId) {
+        console.error("No jobId returned from API");
+        alert("Failed to create audit job. Please try again.");
+        return;
+      }
+
+      // Redirect to report page with jobId
+      const reportUrl = `/report?jobId=${encodeURIComponent(jobId)}`;
+      console.log("Navigating to:", reportUrl);
+      router.push(reportUrl);
+    } catch (err: any) {
+      console.error("Error submitting URL:", err);
+      alert("An error occurred. Please try again.");
+    }
   };
 
   return (

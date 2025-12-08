@@ -913,7 +913,7 @@ function ReportPageContent() {
           {/* Title and URL */}
           <div className="flex-1 ml-8">
             <h1 className="text-4xl font-bold text-white">Audit Results</h1>
-            <p className="text-3xl text-gray-400 mt-1">{truncateUrlAtDomain(finalUrl || auditData?.url || "")}</p>
+            <p className="text-3xl text-gray-400 mt-1">{truncateUrlAtDomain(finalUrl || "")}</p>
           </div>
 
           {/* SEO Score Badge */}

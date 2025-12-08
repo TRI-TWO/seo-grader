@@ -26,7 +26,13 @@ class AuditQueue {
       enqueuedAt: Date.now(),
     };
 
-    await redis.rpush(QUEUE_KEY, JSON.stringify(item));
+    try {
+      const result = await redis.rpush(QUEUE_KEY, JSON.stringify(item));
+      console.log(`Enqueued job ${jobId} to queue, result:`, result);
+    } catch (error) {
+      console.error(`Error enqueueing job ${jobId}:`, error);
+      throw error;
+    }
   }
 
   /**
@@ -40,9 +46,15 @@ class AuditQueue {
     }
 
     try {
-      return JSON.parse(item) as QueueItem;
+      // Handle both string and already-parsed object cases
+      if (typeof item === 'string') {
+        return JSON.parse(item) as QueueItem;
+      } else {
+        // Already an object (Upstash may auto-parse)
+        return item as QueueItem;
+      }
     } catch (error) {
-      console.error("Error parsing queue item:", error);
+      console.error("Error parsing queue item:", error, "Item type:", typeof item, "Item:", item);
       return null;
     }
   }

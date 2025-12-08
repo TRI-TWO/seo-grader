@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, Suspense } from "react";
+import React, { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type ScoringConfig } from "@/lib/scoring";
@@ -53,6 +53,8 @@ function ReportPageContent() {
   const [mediaMetrics, setMediaMetrics] = useState<any>(null);
   const [jobStatus, setJobStatus] = useState<string>("pending");
   const [jobStage, setJobStage] = useState<number>(0);
+  const [partialAudit, setPartialAudit] = useState<boolean>(false);
+  const isPollingRef = useRef<boolean>(true);
 
   // Debug logging
   useEffect(() => {
@@ -104,10 +106,15 @@ function ReportPageContent() {
       return;
     }
 
-    let pollInterval: NodeJS.Timeout;
-    let isMounted = true;
+    let pollInterval: NodeJS.Timeout | null = null;
+    isPollingRef.current = true;
 
     const pollJobStatus = async () => {
+      // Early return if polling should stop
+      if (!isPollingRef.current) {
+        return;
+      }
+
       try {
         const response = await fetch(`/api/audit/${jobId}`);
         
@@ -115,6 +122,10 @@ function ReportPageContent() {
           if (response.status === 404) {
             setError("Job not found");
             setLoading(false);
+            isPollingRef.current = false;
+            if (pollInterval) {
+              clearInterval(pollInterval);
+            }
             return;
           }
           throw new Error(`HTTP ${response.status}`);
@@ -125,6 +136,16 @@ function ReportPageContent() {
 
         setJobStatus(job.status);
         setJobStage(job.stage || 0);
+        setPartialAudit(job.partialAudit || job.partial_audit || false);
+
+        // Stop polling if job is in terminal state
+        if (job.status === "error" || job.status === "done") {
+          isPollingRef.current = false;
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+        }
 
         if (job.status === "error") {
           setError(job.errorMessage || "Job processing failed");
@@ -132,9 +153,9 @@ function ReportPageContent() {
           return;
         }
 
-        if (job.status === "done" && job.results) {
-          // Job is complete, process results
-          const results = job.results;
+        if (job.status === "done") {
+          // Job is complete, process results (may be partial)
+          const results = job.results || {};
           setFinalUrl(results.finalUrl || results.url || "");
           
           // Set API data structure for compatibility
@@ -142,7 +163,7 @@ function ReportPageContent() {
             success: true,
             url: results.url,
             finalUrl: results.finalUrl || results.url,
-            status: results.status || 200,
+            status: results.status || 0,
             contentType: results.contentType,
             html: results.html || "",
             robotsTxt: results.robotsTxt,
@@ -198,10 +219,6 @@ function ReportPageContent() {
           }
 
           setLoading(false);
-          // Stop polling when done
-          if (pollInterval) {
-            clearInterval(pollInterval);
-          }
           return;
         }
 
@@ -271,9 +288,14 @@ function ReportPageContent() {
 
       } catch (err: any) {
         console.error("Error polling job status:", err);
-        if (isMounted) {
+        if (isPollingRef.current) {
           setError(err?.message || "Unknown error occurred");
           setLoading(false);
+          isPollingRef.current = false;
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
         }
       }
     };
@@ -283,19 +305,26 @@ function ReportPageContent() {
 
     // Set up polling interval (every 2.5 seconds)
     pollInterval = setInterval(() => {
-      if (isMounted && jobStatus !== "done" && jobStatus !== "error") {
+      if (isPollingRef.current) {
         pollJobStatus();
+      } else {
+        // Stop interval if polling should stop
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
       }
     }, 2500);
 
     // Cleanup
     return () => {
-      isMounted = false;
+      isPollingRef.current = false;
       if (pollInterval) {
         clearInterval(pollInterval);
+        pollInterval = null;
       }
     };
-  }, [jobId, jobStatus]);
+  }, [jobId]);
 
   const parseHTML = (html: string, apiData: any): Omit<AuditData, "seoScore" | "titleScoreRaw" | "titleScore10" | "titleStatus" | "mediaScoreRaw" | "mediaScore10" | "mediaStatus" | "aiScoreRaw" | "aiScore10" | "aiStatus"> => {
     const parser = new DOMParser();
@@ -865,6 +894,21 @@ function ReportPageContent() {
 
   return (
     <div className="min-h-screen bg-zinc-900">
+      {/* Partial Audit Warning Banner */}
+      {partialAudit && jobStage === 1 && jobStatus === "done" && (
+        <div className="bg-yellow-600 border-b border-yellow-700 px-6 py-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center gap-3">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div className="text-white font-semibold">
+                This site blocked automated access. Partial audit displayed. Some checks may be missing or incomplete.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-zinc-900 border-b border-zinc-700 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">

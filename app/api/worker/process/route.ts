@@ -147,16 +147,17 @@ async function runWorker(req: NextRequest): Promise<NextResponse> {
       console.error(`Error processing job ${jobId}:`, error);
       // processAuditJob should have already updated the job status to "error"
       // But ensure it's marked as error if it wasn't
-      const updatePromise = supabase
-        .from("audit_jobs")
-        .update({
-          status: "error",
-          error_message: error?.message || "Job processing failed",
-        })
-        .eq("id", jobId);
-      (updatePromise as unknown as Promise<any>).catch((updateError) => {
+      try {
+        await supabase
+          .from("audit_jobs")
+          .update({
+            status: "error",
+            error_message: error?.message || "Job processing failed",
+          })
+          .eq("id", jobId);
+      } catch (updateError) {
         console.error(`Failed to update job ${jobId} status:`, updateError);
-      });
+      }
       
       return NextResponse.json({
         success: false,

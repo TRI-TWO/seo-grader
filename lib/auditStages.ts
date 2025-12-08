@@ -8,6 +8,7 @@
  */
 
 import { supabase } from "./supabase";
+import { JSDOM } from "jsdom";
 import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type ScoringConfig } from "./scoring";
 import scoringConfig from "./scoring-config.json";
 
@@ -15,6 +16,27 @@ import scoringConfig from "./scoring-config.json";
 const FETCH_TIMEOUT = 10000; // 10 seconds (as per requirements)
 const AI_ANALYSIS_TIMEOUT = 8000; // 8 seconds (as per requirements)
 const TOTAL_JOB_TIMEOUT = 180000; // 3 minutes
+const ROBOTS_FETCH_TIMEOUT = 5000; // 5 seconds for robots.txt fallback
+
+// Browser header profiles for retry logic
+const BROWSER_HEADER_PROFILE_A = {
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "no-cache",
+  Pragma: "no-cache",
+};
+
+const BROWSER_HEADER_PROFILE_B = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "no-cache",
+  Pragma: "no-cache",
+};
+
 
 export type AuditResults = {
   // Stage 1 results
@@ -64,179 +86,331 @@ export type AuditResults = {
   aiOptimizationTimeout?: boolean;
 };
 
+
+/**
+ * Parse robots.txt for sitemap URLs and basic crawl directives
+ */
+function parseRobotsTxt(robotsTxt: string): { sitemaps: string[]; crawlAllowed: boolean } {
+  const sitemaps: string[] = [];
+  let crawlAllowed = true;
+  
+  if (!robotsTxt) {
+    return { sitemaps, crawlAllowed };
+  }
+  
+  const lines = robotsTxt.split('
+');
+  let inUserAgentBlock = false;
+  let currentUserAgent = '';
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    
+    const lowerLine = trimmed.toLowerCase();
+    
+    // Check for Sitemap directive
+    if (lowerLine.startsWith('sitemap:')) {
+      const sitemapUrl = trimmed.substring(8).trim();
+      if (sitemapUrl) {
+        sitemaps.push(sitemapUrl);
+      }
+      continue;
+    }
+    
+    // Check for User-agent directive
+    if (lowerLine.startsWith('user-agent:')) {
+      currentUserAgent = trimmed.substring(11).trim().toLowerCase();
+      inUserAgentBlock = currentUserAgent === '*' || currentUserAgent === '';
+      continue;
+    }
+    
+    // Check for Disallow in * user-agent block
+    if (inUserAgentBlock && lowerLine.startsWith('disallow:')) {
+      const path = trimmed.substring(9).trim();
+      if (path === '/') {
+        crawlAllowed = false;
+      }
+    }
+  }
+  
+  return { sitemaps, crawlAllowed };
+}
+
+
 /**
  * Stage 1: Fast Pass - Basic audit data
  */
 export async function processStage1(jobId: string, url: string): Promise<Partial<AuditResults>> {
+  // Update status
+  await supabase
+    .from("audit_jobs")
+    .update({ status: "running", stage: 1 })
+    .eq("id", jobId);
+
+  // Normalize URL
+  let targetUrl = url.trim();
+  if (!/^https?:\/\//i.test(targetUrl)) {
+    targetUrl = "https://" + targetUrl;
+  }
+
+  let parsed: URL;
   try {
-    // Update status
+    parsed = new URL(targetUrl);
+  } catch {
+    // Invalid URL - mark as done with partial audit
     await supabase
       .from("audit_jobs")
-      .update({ status: "running", stage: 1 })
+      .update({
+        status: "done",
+        stage: 1,
+        partial_audit: true,
+        error_message: "Invalid URL",
+      })
       .eq("id", jobId);
+    return {};
+  }
 
-    // Normalize URL
-    let targetUrl = url.trim();
-    if (!/^https?:\/\//i.test(targetUrl)) {
-      targetUrl = "https://" + targetUrl;
-    }
+  const origin = parsed.origin;
+  let pageRes: Response | null = null;
+  let html: string = "";
+  let finalUrl: string = targetUrl;
+  let contentType: string | null = null;
+  let status: number = 0;
+  let fetchSuccess = false;
 
-    let parsed: URL;
-    try {
-      parsed = new URL(targetUrl);
-    } catch {
-      throw new Error("Invalid URL");
-    }
-
-    // Fetch HTML with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-    let pageRes: Response;
+  // Attempt 1: Profile A (Chrome on Mac)
+  try {
+    const controller1 = new AbortController();
+    const timeoutId1 = setTimeout(() => controller1.abort(), FETCH_TIMEOUT);
+    
     try {
       pageRes = await fetch(parsed.toString(), {
         method: "GET",
         redirect: "follow",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
+        headers: BROWSER_HEADER_PROFILE_A,
         cache: "no-store",
-        signal: controller.signal,
+        signal: controller1.signal,
       });
-      clearTimeout(timeoutId);
-    } catch (error: any) {
-      clearTimeout(timeoutId);
-      if (error.name === "AbortError") {
-        throw new Error("Request timeout");
+      clearTimeout(timeoutId1);
+      
+      if (pageRes.ok || (pageRes.status >= 200 && pageRes.status < 500)) {
+        html = await pageRes.text();
+        finalUrl = pageRes.url;
+        contentType = pageRes.headers.get("content-type") || null;
+        status = pageRes.status;
+        fetchSuccess = true;
       }
-      throw error;
+    } catch (error) {
+      clearTimeout(timeoutId1);
+      // First attempt failed, will retry
     }
+  } catch (error) {
+    // First attempt failed, will retry
+  }
 
-    const html = await pageRes.text();
-    const finalUrl = pageRes.url;
-    const contentType = pageRes.headers.get("content-type") || null;
-    const status = pageRes.status;
-
-    // Fetch robots.txt and sitemap.xml
-    const origin = new URL(finalUrl || targetUrl).origin;
-    let robotsTxt: string | null = null;
-    let robotsStatus: number | null = null;
-    let sitemapXml: string | null = null;
-    let sitemapStatus: number | null = null;
-
+  // Attempt 2: Profile B (Chrome on Windows) if first attempt failed
+  if (!fetchSuccess) {
     try {
-      const robotsRes = await fetch(origin + "/robots.txt", {
-        method: "GET",
-        redirect: "follow",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
-          Accept: "text/plain,*/*;q=0.8",
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(5000), // 5s timeout for robots
-      });
-      robotsStatus = robotsRes.status;
-      if (robotsRes.ok) {
-        robotsTxt = await robotsRes.text();
+      const controller2 = new AbortController();
+      const timeoutId2 = setTimeout(() => controller2.abort(), FETCH_TIMEOUT);
+      
+      try {
+        pageRes = await fetch(parsed.toString(), {
+          method: "GET",
+          redirect: "follow",
+          headers: BROWSER_HEADER_PROFILE_B,
+          cache: "no-store",
+          signal: controller2.signal,
+        });
+        clearTimeout(timeoutId2);
+        
+        if (pageRes.ok || (pageRes.status >= 200 && pageRes.status < 500)) {
+          html = await pageRes.text();
+          finalUrl = pageRes.url;
+          contentType = pageRes.headers.get("content-type") || null;
+          status = pageRes.status;
+          fetchSuccess = true;
+        }
+      } catch (error) {
+        clearTimeout(timeoutId2);
+        // Second attempt also failed
       }
-    } catch {
+    } catch (error) {
+      // Both attempts failed
+    }
+  }
+
+  // If both HTML fetch attempts failed, try robots.txt fallback
+  let robotsTxt: string | null = null;
+  let robotsStatus: number | null = null;
+  let sitemapXml: string | null = null;
+  let sitemapStatus: number | null = null;
+  let technicalData: any = {};
+
+  if (!fetchSuccess) {
+    // Attempt to fetch robots.txt for technical-only partial audit
+    try {
+      const robotsController = new AbortController();
+      const robotsTimeoutId = setTimeout(() => robotsController.abort(), ROBOTS_FETCH_TIMEOUT);
+      
+      try {
+        const robotsRes = await fetch(origin + "/robots.txt", {
+          method: "GET",
+          redirect: "follow",
+          headers: BROWSER_HEADER_PROFILE_A,
+          cache: "no-store",
+          signal: robotsController.signal,
+        });
+        clearTimeout(robotsTimeoutId);
+        
+        robotsStatus = robotsRes.status;
+        if (robotsRes.ok) {
+          robotsTxt = await robotsRes.text();
+          // Parse robots.txt for sitemaps and crawl directives
+          const parsedRobots = parseRobotsTxt(robotsTxt);
+          technicalData = {
+            robots: {
+              found: true,
+              crawlAllowed: parsedRobots.crawlAllowed,
+            },
+            sitemaps: parsedRobots.sitemaps,
+          };
+        }
+      } catch (error) {
+        clearTimeout(robotsTimeoutId);
+        robotsTxt = null;
+        robotsStatus = null;
+      }
+    } catch (error) {
       robotsTxt = null;
       robotsStatus = null;
     }
 
-    try {
-      const sitemapRes = await fetch(origin + "/sitemap.xml", {
-        method: "GET",
-        redirect: "follow",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
-          Accept: "application/xml,text/xml,*/*;q=0.8",
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(5000), // 5s timeout for sitemap
-      });
-      sitemapStatus = sitemapRes.status;
-      if (sitemapRes.ok) {
-        sitemapXml = await sitemapRes.text();
-      }
-    } catch {
-      sitemapXml = null;
-      sitemapStatus = null;
-    }
-
-    // Parse HTML for basic data
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-
-    const titleEl = doc.querySelector("title");
-    const titleTag = titleEl?.textContent?.trim() || "Title Tag";
-
-    const metaDesc = doc.querySelector('meta[name="description"]');
-    const metaDescription = metaDesc?.getAttribute("content") || "Missing";
-    const metaDescriptionWordCount = metaDescription !== "Missing"
-      ? metaDescription.split(/\s+/).filter(Boolean).length
-      : 0;
-
-    const h1s = Array.from(doc.querySelectorAll("h1"));
-    const h1Count = h1s.length;
-    const h1Texts = h1s.map((h) => h.textContent?.trim() || "");
-
-    const bodyText = doc.body?.textContent || "";
-    const wordCount = bodyText.split(/\s+/).filter(Boolean).length;
-
-    const favicon =
-      doc.querySelector('link[rel="icon"]') ||
-      doc.querySelector('link[rel="shortcut icon"]') ||
-      doc.querySelector('link[rel="apple-touch-icon"]');
-    const hasFavicon = !!favicon;
-
-    const canonical = doc.querySelector('link[rel="canonical"]');
-    const canonicalTag = canonical ? "Canonical tag detected" : "Viewport meta tag detected";
-
-    const hasRobotsTxt = robotsTxt !== null && robotsStatus !== null && robotsStatus < 400;
-    const hasSitemapXml = sitemapXml !== null && sitemapStatus !== null && sitemapStatus < 400;
-
-    const results: Partial<AuditResults> = {
+    // Mark as done with partial audit
+    const partialResults: Partial<AuditResults> = {
       url,
-      finalUrl,
-      status,
-      contentType,
-      html,
+      finalUrl: targetUrl,
+      status: 0,
       robotsTxt,
       robotsStatus,
-      sitemapXml,
-      sitemapStatus,
-      titleTag,
-      metaDescription,
-      metaDescriptionWordCount,
-      h1Count,
-      h1Texts,
-      wordCount,
-      favicon: hasFavicon,
-      canonicalTag,
-      robotsTxtFound: hasRobotsTxt,
-      sitemapXmlFound: hasSitemapXml,
+      robotsTxtFound: robotsTxt !== null && robotsStatus !== null && robotsStatus < 400,
+      sitemapXmlFound: false,
+      ...(Object.keys(technicalData).length > 0 ? { technical: technicalData } : {}),
+      partialAudit: true,
     };
 
-    // Save partial results
-    await supabase
-      .from("audit_jobs")
-      .update({ results: results as any })
-      .eq("id", jobId);
-
-    return results;
-  } catch (error: any) {
     await supabase
       .from("audit_jobs")
       .update({
-        status: "error",
-        error_message: error?.message || "Stage 1 failed",
+        status: "done",
+        stage: 1,
+        partial_audit: true,
+        error_message: "Stage 1 timeout / blocked by site",
+        results: partialResults as any,
       })
       .eq("id", jobId);
-    throw error;
+
+    return partialResults;
   }
+
+  // HTML fetch succeeded - continue with normal processing
+  // Fetch robots.txt and sitemap.xml (existing logic)
+  try {
+    const robotsRes = await fetch(origin + "/robots.txt", {
+      method: "GET",
+      redirect: "follow",
+      headers: BROWSER_HEADER_PROFILE_A,
+      cache: "no-store",
+      signal: AbortSignal.timeout(ROBOTS_FETCH_TIMEOUT),
+    });
+    robotsStatus = robotsRes.status;
+    if (robotsRes.ok) {
+      robotsTxt = await robotsRes.text();
+    }
+  } catch {
+    robotsTxt = null;
+    robotsStatus = null;
+  }
+
+  try {
+    const sitemapRes = await fetch(origin + "/sitemap.xml", {
+      method: "GET",
+      redirect: "follow",
+      headers: BROWSER_HEADER_PROFILE_A,
+      cache: "no-store",
+      signal: AbortSignal.timeout(ROBOTS_FETCH_TIMEOUT),
+    });
+    sitemapStatus = sitemapRes.status;
+    if (sitemapRes.ok) {
+      sitemapXml = await sitemapRes.text();
+    }
+  } catch {
+    sitemapXml = null;
+    sitemapStatus = null;
+  }
+
+  // Parse HTML for basic data
+  const doc = new JSDOM(html).window.document;
+
+  const titleEl = doc.querySelector("title");
+  const titleTag = titleEl?.textContent?.trim() || "Title Tag";
+
+  const metaDesc = doc.querySelector('meta[name="description"]');
+  const metaDescription = metaDesc?.getAttribute("content") || "Missing";
+  const metaDescriptionWordCount = metaDescription !== "Missing"
+    ? metaDescription.split(/\s+/).filter(Boolean).length
+    : 0;
+
+  const h1s = Array.from(doc.querySelectorAll("h1"));
+  const h1Count = h1s.length;
+  const h1Texts = h1s.map((h) => h.textContent?.trim() || "");
+
+  const bodyText = doc.body?.textContent || "";
+  const wordCount = bodyText.split(/\s+/).filter(Boolean).length;
+
+  const favicon =
+    doc.querySelector('link[rel="icon"]') ||
+    doc.querySelector('link[rel="shortcut icon"]') ||
+    doc.querySelector('link[rel="apple-touch-icon"]');
+  const hasFavicon = !!favicon;
+
+  const canonical = doc.querySelector('link[rel="canonical"]');
+  const canonicalTag = canonical ? "Canonical tag detected" : "Viewport meta tag detected";
+
+  const hasRobotsTxt = robotsTxt !== null && robotsStatus !== null && robotsStatus < 400;
+  const hasSitemapXml = sitemapXml !== null && sitemapStatus !== null && sitemapStatus < 400;
+
+  const results: Partial<AuditResults> = {
+    url,
+    finalUrl,
+    status,
+    contentType,
+    html,
+    robotsTxt,
+    robotsStatus,
+    sitemapXml,
+    sitemapStatus,
+    titleTag,
+    metaDescription,
+    metaDescriptionWordCount,
+    h1Count,
+    h1Texts,
+    wordCount,
+    favicon: hasFavicon,
+    canonicalTag,
+    robotsTxtFound: hasRobotsTxt,
+    sitemapXmlFound: hasSitemapXml,
+  };
+
+  // Save partial results
+  await supabase
+    .from("audit_jobs")
+    .update({ results: results as any })
+    .eq("id", jobId);
+
+  return results;
+}
 }
 
 /**
@@ -254,8 +428,7 @@ export async function processStage2(
       .eq("id", jobId);
 
     const html = stage1Results.html || "";
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
+    const doc = new JSDOM(html).window.document;
 
     // Extract media metrics
     const images = Array.from(doc.querySelectorAll("img"));
@@ -455,8 +628,7 @@ export async function processStage3(
       .eq("id", jobId);
 
     const html = stage2Results.html || "";
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
+    const doc = new JSDOM(html).window.document;
     const bodyText = doc.body?.textContent || "";
     const bodyLower = bodyText.toLowerCase();
 
@@ -761,53 +933,3 @@ export async function processAuditJob(jobId: string, url: string, startFromStage
     throw error;
   }
 }
-    } catch {
-      // If states API fails, continue with empty array
-      states = [];
-    }
-
-    // Stage 1
-    const stage1Results = await processStage1(jobId, url);
-
-    // Check timeout
-    if (Date.now() - startTime > TOTAL_JOB_TIMEOUT) {
-      await supabase
-        .from("audit_jobs")
-        .update({
-          status: "done",
-          partial_audit: true,
-          results: { ...stage1Results, partialAudit: true } as any,
-        })
-        .eq("id", jobId);
-      return;
-    }
-
-    // Stage 2
-    const stage2Results = await processStage2(jobId, stage1Results, states);
-
-    // Check timeout
-    if (Date.now() - startTime > TOTAL_JOB_TIMEOUT) {
-      await supabase
-        .from("audit_jobs")
-        .update({
-          status: "done",
-          partial_audit: true,
-          results: { ...stage2Results, partialAudit: true } as any,
-        })
-        .eq("id", jobId);
-      return;
-    }
-
-    // Stage 3
-    await processStage3(jobId, stage2Results);
-  } catch (error: any) {
-    await supabase
-      .from("audit_jobs")
-      .update({
-        status: "error",
-        error_message: error?.message || "Job processing failed",
-      })
-      .eq("id", jobId);
-  }
-}
-

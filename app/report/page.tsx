@@ -1133,7 +1133,7 @@ function ReportPageContent() {
               <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
                 <div className="flex-1">
                   <div className="text-base font-medium text-gray-300 mb-1">Machine Readability & Formatting</div>
-                  <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.machineReadability}/10` : "0/10"}`}</div>
+                  <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.machineReadability}/10` : "0/10"}</div>
                 </div>
                 <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.machineReadability >= 8 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.machineReadability >= 5 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
                   {aiMetrics && aiMetrics.machineReadability >= 8 ? "OK" : aiMetrics && aiMetrics.machineReadability >= 5 ? "WARNING" : "ISSUE"}

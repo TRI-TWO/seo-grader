@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { auditQueue } from "@/lib/auditQueue";
-import { processAuditJob } from "@/lib/auditStages";
-import "@/lib/auditWorker"; // Initialize worker
-
-const prisma = new PrismaClient();
+import { supabase } from "@/lib/supabase";
+import { redis } from "@/lib/upstash";
 
 export const runtime = "nodejs";
 
@@ -42,39 +39,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check for existing job (single-flight + caching)
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    // Check for running/pending job (single-flight)
-    const existingRunning = await prisma.auditJob.findFirst({
-      where: {
-        url: targetUrl,
-        status: {
-          in: ["pending", "running"],
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    // Single-flight locking: Check for running/pending job with same URL
+    const { data: existingRunning } = await supabase
+      .from("audit_jobs")
+      .select("id")
+      .eq("url", targetUrl)
+      .in("status", ["pending", "running"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
 
     if (existingRunning) {
       return NextResponse.json({ jobId: existingRunning.id });
     }
 
-    // Check for recently completed job (caching)
-    const existingCompleted = await prisma.auditJob.findFirst({
-      where: {
-        url: targetUrl,
-        status: "done",
-        createdAt: {
-          gte: oneDayAgo,
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    // 24h caching: Check for recently completed job
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: existingCompleted } = await supabase
+      .from("audit_jobs")
+      .select("id")
+      .eq("url", targetUrl)
+      .eq("status", "done")
+      .gte("created_at", oneDayAgo)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
 
     if (existingCompleted) {
       return NextResponse.json({ jobId: existingCompleted.id });
@@ -82,18 +71,28 @@ export async function POST(req: NextRequest) {
 
     // Create new job
     const jobId = uuidv4();
-    const job = await prisma.auditJob.create({
-      data: {
+    const { data: job, error: insertError } = await supabase
+      .from("audit_jobs")
+      .insert({
         id: jobId,
         url: targetUrl,
         status: "pending",
         stage: 0,
         results: null,
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (insertError || !job) {
+      console.error("Error creating audit job:", insertError);
+      return NextResponse.json(
+        { error: insertError?.message || "Failed to create audit job" },
+        { status: 500 }
+      );
+    }
 
     // Enqueue for processing
-    auditQueue.enqueue(jobId, targetUrl);
+    await auditQueue.enqueue(jobId, targetUrl);
 
     return NextResponse.json({ jobId }, { status: 201 });
   } catch (error: any) {
@@ -104,4 +103,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

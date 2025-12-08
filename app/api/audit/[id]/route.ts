@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
@@ -25,11 +23,13 @@ export async function GET(
       );
     }
 
-    const job = await prisma.auditJob.findUnique({
-      where: { id },
-    });
+    const { data: job, error } = await supabase
+      .from("audit_jobs")
+      .select("*")
+      .eq("id", id)
+      .single();
 
-    if (!job) {
+    if (error || !job) {
       return NextResponse.json(
         { error: "Job not found" },
         { status: 404 }
@@ -42,7 +42,8 @@ export async function GET(
       status: job.status,
       stage: job.stage,
       results: job.results,
-      errorMessage: job.errorMessage || undefined,
+      errorMessage: job.error_message || undefined,
+      partialAudit: job.partial_audit || false,
     });
   } catch (error: any) {
     console.error("Error fetching audit job:", error);
@@ -52,4 +53,3 @@ export async function GET(
     );
   }
 }
-

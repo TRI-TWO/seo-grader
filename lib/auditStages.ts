@@ -7,15 +7,13 @@
  * - Stage 3: AI Optimization (heavier NLP analysis)
  */
 
-import { PrismaClient } from "@prisma/client";
+import { supabase } from "./supabase";
 import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type ScoringConfig } from "./scoring";
 import scoringConfig from "./scoring-config.json";
 
-const prisma = new PrismaClient();
-
 // Timeout constants
-const FETCH_TIMEOUT = 8000; // 8 seconds
-const AI_ANALYSIS_TIMEOUT = 10000; // 10 seconds
+const FETCH_TIMEOUT = 10000; // 10 seconds (as per requirements)
+const AI_ANALYSIS_TIMEOUT = 8000; // 8 seconds (as per requirements)
 const TOTAL_JOB_TIMEOUT = 180000; // 3 minutes
 
 export type AuditResults = {
@@ -72,10 +70,10 @@ export type AuditResults = {
 export async function processStage1(jobId: string, url: string): Promise<Partial<AuditResults>> {
   try {
     // Update status
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: { status: "running", stage: 1 },
-    });
+    await supabase
+      .from("audit_jobs")
+      .update({ status: "running", stage: 1 })
+      .eq("id", jobId);
 
     // Normalize URL
     let targetUrl = url.trim();
@@ -223,20 +221,20 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
     };
 
     // Save partial results
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: { results: results as any },
-    });
+    await supabase
+      .from("audit_jobs")
+      .update({ results: results as any })
+      .eq("id", jobId);
 
     return results;
   } catch (error: any) {
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: {
+    await supabase
+      .from("audit_jobs")
+      .update({
         status: "error",
-        errorMessage: error?.message || "Stage 1 failed",
-      },
-    });
+        error_message: error?.message || "Stage 1 failed",
+      })
+      .eq("id", jobId);
     throw error;
   }
 }
@@ -250,10 +248,10 @@ export async function processStage2(
   states: any[]
 ): Promise<Partial<AuditResults>> {
   try {
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: { stage: 2 },
-    });
+    await supabase
+      .from("audit_jobs")
+      .update({ stage: 2 })
+      .eq("id", jobId);
 
     const html = stage1Results.html || "";
     const parser = new DOMParser();
@@ -422,20 +420,20 @@ export async function processStage2(
       mediaMetrics,
     };
 
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: { results: results as any },
-    });
+    await supabase
+      .from("audit_jobs")
+      .update({ results: results as any })
+      .eq("id", jobId);
 
     return results;
   } catch (error: any) {
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: {
+    await supabase
+      .from("audit_jobs")
+      .update({
         status: "error",
-        errorMessage: error?.message || "Stage 2 failed",
-      },
-    });
+        error_message: error?.message || "Stage 2 failed",
+      })
+      .eq("id", jobId);
     throw error;
   }
 }
@@ -451,10 +449,10 @@ export async function processStage3(
   let aiTimeout = false;
 
   try {
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: { stage: 3 },
-    });
+    await supabase
+      .from("audit_jobs")
+      .update({ stage: 3 })
+      .eq("id", jobId);
 
     const html = stage2Results.html || "";
     const parser = new DOMParser();
@@ -658,23 +656,23 @@ export async function processStage3(
       aiOptimizationTimeout: aiTimeout,
     };
 
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: {
+    await supabase
+      .from("audit_jobs")
+      .update({
         status: "done",
         results: results as any,
-      },
-    });
+      })
+      .eq("id", jobId);
 
     return results;
   } catch (error: any) {
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: {
+    await supabase
+      .from("audit_jobs")
+      .update({
         status: "error",
-        errorMessage: error?.message || "Stage 3 failed",
-      },
-    });
+        error_message: error?.message || "Stage 3 failed",
+      })
+      .eq("id", jobId);
     throw error;
   }
 }
@@ -708,13 +706,14 @@ export async function processAuditJob(jobId: string, url: string): Promise<void>
 
     // Check timeout
     if (Date.now() - startTime > TOTAL_JOB_TIMEOUT) {
-      await prisma.auditJob.update({
-        where: { id: jobId },
-        data: {
+      await supabase
+        .from("audit_jobs")
+        .update({
           status: "done",
+          partial_audit: true,
           results: { ...stage1Results, partialAudit: true } as any,
-        },
-      });
+        })
+        .eq("id", jobId);
       return;
     }
 
@@ -723,26 +722,27 @@ export async function processAuditJob(jobId: string, url: string): Promise<void>
 
     // Check timeout
     if (Date.now() - startTime > TOTAL_JOB_TIMEOUT) {
-      await prisma.auditJob.update({
-        where: { id: jobId },
-        data: {
+      await supabase
+        .from("audit_jobs")
+        .update({
           status: "done",
+          partial_audit: true,
           results: { ...stage2Results, partialAudit: true } as any,
-        },
-      });
+        })
+        .eq("id", jobId);
       return;
     }
 
     // Stage 3
     await processStage3(jobId, stage2Results);
   } catch (error: any) {
-    await prisma.auditJob.update({
-      where: { id: jobId },
-      data: {
+    await supabase
+      .from("audit_jobs")
+      .update({
         status: "error",
-        errorMessage: error?.message || "Job processing failed",
-      },
-    });
+        error_message: error?.message || "Job processing failed",
+      })
+      .eq("id", jobId);
   }
 }
 

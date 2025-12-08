@@ -1,77 +1,76 @@
 /**
  * Audit Queue System
  * 
- * Simple in-memory queue for processing audit jobs.
- * Can be swapped later for Redis/Cloud Tasks/SQS.
+ * Uses Upstash Redis for distributed queue processing.
+ * Jobs are enqueued with LPUSH and dequeued with RPOP.
  */
+
+import { redis } from "./upstash";
+
+const QUEUE_KEY = "audit-jobs";
 
 type QueueItem = {
   jobId: string;
   url: string;
-  enqueuedAt: Date;
+  enqueuedAt: number;
 };
 
 class AuditQueue {
-  private queue: QueueItem[] = [];
-  private processing = false;
-  private processCallback: ((jobId: string, url: string) => Promise<void>) | null = null;
-
   /**
    * Enqueue an audit job
    */
-  enqueue(jobId: string, url: string): void {
-    this.queue.push({
+  async enqueue(jobId: string, url: string): Promise<void> {
+    const item: QueueItem = {
       jobId,
       url,
-      enqueuedAt: new Date(),
-    });
+      enqueuedAt: Date.now(),
+    };
 
-    // Start processing if not already running
-    if (!this.processing) {
-      this.startWorker();
-    }
+    await redis.lpush(QUEUE_KEY, JSON.stringify(item));
   }
 
   /**
-   * Register the processing callback
+   * Dequeue the next job (FIFO - removes from right side)
+   * Returns null if queue is empty
    */
-  setProcessor(callback: (jobId: string, url: string) => Promise<void>): void {
-    this.processCallback = callback;
+  async dequeue(): Promise<QueueItem | null> {
+    const item = await redis.rpop<string>(QUEUE_KEY);
+    if (!item) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(item) as QueueItem;
+    } catch (error) {
+      console.error("Error parsing queue item:", error);
+      return null;
+    }
   }
 
   /**
    * Get queue length
    */
-  getLength(): number {
-    return this.queue.length;
+  async getLength(): Promise<number> {
+    return await redis.llen(QUEUE_KEY);
   }
 
   /**
-   * Start the worker loop
+   * Peek at the next job without removing it
    */
-  private async startWorker(): void {
-    if (this.processing) return;
-    this.processing = true;
-
-    while (this.queue.length > 0 && this.processCallback) {
-      const item = this.queue.shift();
-      if (!item) break;
-
-      try {
-        await this.processCallback(item.jobId, item.url);
-      } catch (error) {
-        console.error(`Error processing job ${item.jobId}:`, error);
-        // Continue processing other jobs even if one fails
-      }
-
-      // Small delay to prevent overwhelming the system
-      await new Promise(resolve => setTimeout(resolve, 100));
+  async peek(): Promise<QueueItem | null> {
+    const items = await redis.lrange<string>(QUEUE_KEY, -1, -1);
+    if (!items || items.length === 0) {
+      return null;
     }
 
-    this.processing = false;
+    try {
+      return JSON.parse(items[0]) as QueueItem;
+    } catch (error) {
+      console.error("Error parsing queue item:", error);
+      return null;
+    }
   }
 }
 
 // Singleton instance
 export const auditQueue = new AuditQueue();
-

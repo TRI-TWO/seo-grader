@@ -654,12 +654,14 @@ export async function processStage3(
       aiStatus,
       aiMetrics,
       aiOptimizationTimeout: aiTimeout,
+      partialAudit: aiTimeout, // Set partial_audit if AI stage timed out
     };
 
     await supabase
       .from("audit_jobs")
       .update({
         status: "done",
+        partial_audit: aiTimeout, // Set partial_audit if AI stage timed out
         results: results as any,
       })
       .eq("id", jobId);

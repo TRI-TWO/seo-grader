@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/worker/process",
+      "schedule": "*/1 * * * *"
+    }
+  ]
+}
+

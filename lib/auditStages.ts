@@ -98,8 +98,7 @@ function parseRobotsTxt(robotsTxt: string): { sitemaps: string[]; crawlAllowed: 
     return { sitemaps, crawlAllowed };
   }
   
-  const lines = robotsTxt.split('
-');
+  const lines = robotsTxt.split('\n');
   let inUserAgentBlock = false;
   let currentUserAgent = '';
   
@@ -410,7 +409,6 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
     .eq("id", jobId);
 
   return results;
-}
 }
 
 /**

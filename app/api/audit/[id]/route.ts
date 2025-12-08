@@ -3,6 +3,19 @@ import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
+// Timeout constants
+const DB_QUERY_TIMEOUT = 5000; // 5 seconds for database queries
+
+// Helper to add timeout to promises
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    ),
+  ]);
+}
+
 /**
  * GET /api/audit/[id] - Get audit job status and results
  * 
@@ -23,11 +36,18 @@ export async function GET(
       );
     }
 
-    const { data: job, error } = await supabase
+    const queryPromise = supabase
       .from("audit_jobs")
       .select("*")
       .eq("id", id)
       .single();
+    
+    const queryResult = await withTimeout(
+      queryPromise as unknown as Promise<any>,
+      DB_QUERY_TIMEOUT,
+      "Database query timed out"
+    );
+    const { data: job, error } = queryResult;
 
     if (error || !job) {
       return NextResponse.json(

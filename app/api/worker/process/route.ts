@@ -5,6 +5,20 @@ import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
+// Timeout constants
+const API_TIMEOUT = 10000; // 10 seconds for API operations
+const DB_QUERY_TIMEOUT = 5000; // 5 seconds for database queries
+
+// Helper to add timeout to promises
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    ),
+  ]);
+}
+
 /**
  * POST /api/worker/process - Process next audit job from queue
  * 
@@ -17,7 +31,11 @@ export async function POST(req: NextRequest) {
     // For now, we'll allow it to be called by Vercel Cron
 
     // Dequeue next job
-    const queueItem = await auditQueue.dequeue();
+    const queueItem = await withTimeout(
+      auditQueue.dequeue(),
+      API_TIMEOUT,
+      "Queue dequeue timed out"
+    ) as { jobId: string; url: string; enqueuedAt: number } | null;
 
     if (!queueItem) {
       // No jobs in queue
@@ -31,11 +49,17 @@ export async function POST(req: NextRequest) {
     const { jobId, url } = queueItem;
 
     // Load job from Supabase to verify it exists and get current status
-    const { data: job, error: jobError } = await supabase
+    const queryPromise = supabase
       .from("audit_jobs")
       .select("*")
       .eq("id", jobId)
       .single();
+    const queryResult = await withTimeout(
+      queryPromise as unknown as Promise<any>,
+      DB_QUERY_TIMEOUT,
+      "Database query timed out"
+    );
+    const { data: job, error: jobError } = queryResult;
 
     if (jobError || !job) {
       console.error(`Job ${jobId} not found in database:`, jobError);
@@ -61,7 +85,7 @@ export async function POST(req: NextRequest) {
     const jobAge = Date.now() - new Date(job.created_at).getTime();
     if (jobAge > 180000) {
       // Job is too old, mark as done with partial audit
-      await supabase
+      const updatePromise = supabase
         .from("audit_jobs")
         .update({
           status: "done",
@@ -69,6 +93,11 @@ export async function POST(req: NextRequest) {
           error_message: "Job exceeded maximum processing time",
         })
         .eq("id", jobId);
+      await withTimeout(
+        updatePromise as unknown as Promise<any>,
+        DB_QUERY_TIMEOUT,
+        "Database update timed out"
+      );
 
       return NextResponse.json({
         success: true,

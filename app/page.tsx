@@ -20,15 +20,21 @@ export default function Home() {
       return;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+    
     try {
-      // POST to /api/audit to create job
+      // POST to /api/audit to create job with timeout
       const response = await fetch("/api/audit", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ url: trimmedUrl }),
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
@@ -49,8 +55,13 @@ export default function Home() {
       console.log("Navigating to:", reportUrl);
       router.push(reportUrl);
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error("Error submitting URL:", err);
-      alert("An error occurred. Please try again.");
+      if (err.name === "AbortError") {
+        alert("Request timed out. Please try again.");
+      } else {
+        alert("An error occurred. Please try again.");
+      }
     }
   };
 

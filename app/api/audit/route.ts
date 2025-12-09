@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { processStage1Sync, processStage2Sync, processStage3Sync } from "@/lib/auditStages";
+import { processStage1Sync, processStage2Sync, processStage3Sync, type AuditResults } from "@/lib/auditStages";
 
 export const runtime = "nodejs";
 
@@ -143,9 +143,9 @@ export async function POST(req: NextRequest) {
     })();
 
     // Race against hard timeout
-    const results = await Promise.race([
+    const results: Partial<AuditResults> = await Promise.race([
       auditPromise,
-      new Promise<typeof auditPromise extends Promise<infer T> ? T : never>((_, reject) =>
+      new Promise<Partial<AuditResults>>((_, reject) =>
         setTimeout(() => reject(new Error("Request timeout - audit exceeded maximum time")), HARD_TIMEOUT)
       ),
     ]).catch((error) => {
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
         finalUrl: targetUrl,
         status: 0,
         partialAudit: true,
-      };
+      } as Partial<AuditResults>;
     });
 
     // Return results directly

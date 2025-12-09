@@ -86,10 +86,10 @@ function ReportPageContent() {
     };
     loadStates();
 
-    // Load results from sessionStorage
+    // Load results from localStorage
     if (typeof window !== 'undefined') {
-      const resultsJson = sessionStorage.getItem('auditResults');
-      console.log("Loading from sessionStorage:", { hasResults: !!resultsJson });
+      const resultsJson = localStorage.getItem('auditResults');
+      console.log("Loading from localStorage:", { hasResults: !!resultsJson });
       
       if (resultsJson) {
         try {
@@ -103,8 +103,8 @@ function ReportPageContent() {
             url: results.url,
           });
           
-          // Clear sessionStorage after reading
-          sessionStorage.removeItem('auditResults');
+          // Clear localStorage after reading
+          localStorage.removeItem('auditResults');
           
           // Process results
           setFinalUrl(results.finalUrl || results.url || "");

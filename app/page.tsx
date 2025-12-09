@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 type TabType = "home" | "pricing" | "about";
 
 export default function Home() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("home");
   const [urlInput, setUrlInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleUrlSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>) => {
@@ -24,7 +24,6 @@ export default function Home() {
 
     setLoading(true);
     setError(null);
-    setResults(null);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout (API has 25s max)
@@ -69,8 +68,11 @@ export default function Home() {
         partialAudit: auditResults.partialAudit,
       });
 
-      // Set results and render report
-      setResults(auditResults);
+      // Store results in localStorage and navigate to report page
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auditResults', JSON.stringify(auditResults));
+        router.push('/report');
+      }
       setLoading(false);
     } catch (err: any) {
       clearTimeout(timeoutId);
@@ -83,25 +85,6 @@ export default function Home() {
       }
     }
   };
-
-  // If results are available, navigate to report page with results in state
-  // We'll use sessionStorage to pass results to the report page
-  if (results) {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('auditResults', JSON.stringify(results));
-      window.location.href = '/report';
-    }
-    return (
-      <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-white mb-4">Loading Report...</div>
-          <div className="flex justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-zinc-900 text-white relative overflow-hidden">

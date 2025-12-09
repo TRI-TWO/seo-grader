@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
       `${requestUrl.protocol}//${requestUrl.host}`;
     
+    // Get worker secret from env to pass to worker process endpoint
+    const workerSecret = process.env.WORKER_SECRET;
+    
     console.log(`Manual trigger: Calling worker at ${baseUrl}/api/worker/process`);
 
     // Call the worker process endpoint

@@ -103,31 +103,35 @@ async function runWorker(req: NextRequest): Promise<NextResponse> {
     const startFromStage = currentStage === 0 ? 1 : currentStage + 1; // Resume from next stage
     const existingResults = job.results || {};
 
-    // Check if job has exceeded total timeout (3 minutes)
-    const jobAge = Date.now() - new Date(job.created_at).getTime();
-    if (jobAge > 180000) {
-      // Job is too old, mark as done with partial audit
-      const updatePromise = supabase
-        .from("audit_jobs")
-        .update({
-          status: "done",
-          partial_audit: true,
-          error_message: "Job exceeded maximum processing time",
-        })
-        .eq("id", jobId);
-      await withTimeout(
-        updatePromise as unknown as Promise<any>,
-        DB_QUERY_TIMEOUT,
-        "Database update timed out"
-      );
+    // Only timeout jobs that are actively running for too long (not jobs waiting in queue)
+    // If job is "running" and has been running for more than 5 minutes, it's likely stuck
+    if (job.status === "running") {
+      const runningTime = Date.now() - new Date(job.updated_at || job.created_at).getTime();
+      if (runningTime > 300000) { // 5 minutes of active processing
+        console.warn(`Job ${jobId} has been running for ${Math.round(runningTime / 1000)}s, marking as timeout`);
+        const updatePromise = supabase
+          .from("audit_jobs")
+          .update({
+            status: "done",
+            partial_audit: true,
+            error_message: "Job exceeded maximum processing time",
+          })
+          .eq("id", jobId);
+        await withTimeout(
+          updatePromise as unknown as Promise<any>,
+          DB_QUERY_TIMEOUT,
+          "Database update timed out"
+        );
 
-      return NextResponse.json({
-        success: true,
-        message: `Job ${jobId} exceeded timeout`,
-        processed: false,
-        jobId,
-      });
+        return NextResponse.json({
+          success: true,
+          message: `Job ${jobId} exceeded timeout`,
+          processed: false,
+          jobId,
+        });
+      }
     }
+    // Jobs in "pending" state can wait in queue indefinitely - they'll be processed when worker runs
 
     // Process the job with timeout protection
     // In serverless, we must await the job processing or it will be killed when function returns

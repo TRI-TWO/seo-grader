@@ -1,31 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
-import { v4 as uuidv4 } from "uuid";
-import { auditQueue } from "@/lib/auditQueue";
-import { supabase } from "@/lib/supabase";
-import { checkRateLimit, acquireLock, releaseLock } from "@/lib/upstash";
+import { processStage1Sync, processStage2Sync, processStage3Sync } from "@/lib/auditStages";
 
 export const runtime = "nodejs";
 
 // Timeout constants
-const API_TIMEOUT = 10000; // 10 seconds for API operations
-const DB_QUERY_TIMEOUT = 5000; // 5 seconds for database queries
+const HARD_TIMEOUT = 25000; // 25 seconds max for entire request
 
-// Helper to add timeout to promises
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-    ),
-  ]);
-}
+// US States data (inline for synchronous execution)
+const US_STATES = [
+  { name: 'Alabama', abbr: 'AL' },
+  { name: 'Alaska', abbr: 'AK' },
+  { name: 'Arizona', abbr: 'AZ' },
+  { name: 'Arkansas', abbr: 'AR' },
+  { name: 'California', abbr: 'CA' },
+  { name: 'Colorado', abbr: 'CO' },
+  { name: 'Connecticut', abbr: 'CT' },
+  { name: 'Delaware', abbr: 'DE' },
+  { name: 'Florida', abbr: 'FL' },
+  { name: 'Georgia', abbr: 'GA' },
+  { name: 'Hawaii', abbr: 'HI' },
+  { name: 'Idaho', abbr: 'ID' },
+  { name: 'Illinois', abbr: 'IL' },
+  { name: 'Indiana', abbr: 'IN' },
+  { name: 'Iowa', abbr: 'IA' },
+  { name: 'Kansas', abbr: 'KS' },
+  { name: 'Kentucky', abbr: 'KY' },
+  { name: 'Louisiana', abbr: 'LA' },
+  { name: 'Maine', abbr: 'ME' },
+  { name: 'Maryland', abbr: 'MD' },
+  { name: 'Massachusetts', abbr: 'MA' },
+  { name: 'Michigan', abbr: 'MI' },
+  { name: 'Minnesota', abbr: 'MN' },
+  { name: 'Mississippi', abbr: 'MS' },
+  { name: 'Missouri', abbr: 'MO' },
+  { name: 'Montana', abbr: 'MT' },
+  { name: 'Nebraska', abbr: 'NE' },
+  { name: 'Nevada', abbr: 'NV' },
+  { name: 'New Hampshire', abbr: 'NH' },
+  { name: 'New Jersey', abbr: 'NJ' },
+  { name: 'New Mexico', abbr: 'NM' },
+  { name: 'New York', abbr: 'NY' },
+  { name: 'North Carolina', abbr: 'NC' },
+  { name: 'North Dakota', abbr: 'ND' },
+  { name: 'Ohio', abbr: 'OH' },
+  { name: 'Oklahoma', abbr: 'OK' },
+  { name: 'Oregon', abbr: 'OR' },
+  { name: 'Pennsylvania', abbr: 'PA' },
+  { name: 'Rhode Island', abbr: 'RI' },
+  { name: 'South Carolina', abbr: 'SC' },
+  { name: 'South Dakota', abbr: 'SD' },
+  { name: 'Tennessee', abbr: 'TN' },
+  { name: 'Texas', abbr: 'TX' },
+  { name: 'Utah', abbr: 'UT' },
+  { name: 'Vermont', abbr: 'VT' },
+  { name: 'Virginia', abbr: 'VA' },
+  { name: 'Washington', abbr: 'WA' },
+  { name: 'West Virginia', abbr: 'WV' },
+  { name: 'Wisconsin', abbr: 'WI' },
+  { name: 'Wyoming', abbr: 'WY' },
+];
 
 /**
- * POST /api/audit - Enqueue an audit job
+ * POST /api/audit - Execute full audit synchronously
  * 
- * Returns quickly with a jobId. The actual scraping happens in the background.
+ * Executes all 3 stages immediately and returns results directly.
+ * No job creation, no queue, no database persistence.
  */
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
+  
   try {
     const body = await req.json();
     const { url } = body;
@@ -53,224 +96,77 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Rate limiting: Check anonymous user rate limit
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || 
-               req.headers.get("x-real-ip") || 
-               "unknown";
-    const rateLimit = await withTimeout(
-      checkRateLimit(ip),
-      API_TIMEOUT,
-      "Rate limit check timed out"
-    ) as { allowed: boolean; remaining: number; resetAt: number };
-    
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        {
-          error: "Rate limit exceeded",
-          message: "Too many requests. Please try again later.",
-          resetAt: rateLimit.resetAt,
-        },
-        {
-          status: 429,
-          headers: {
-            "X-RateLimit-Limit": "10",
-            "X-RateLimit-Remaining": "0",
-            "X-RateLimit-Reset": rateLimit.resetAt.toString(),
-            "Retry-After": Math.ceil((rateLimit.resetAt - Math.floor(Date.now() / 1000))).toString(),
-          },
-        }
-      );
-    }
-
-    // Single-flight locking: Try to acquire lock for this URL
-    const lockAcquired = await withTimeout(
-      acquireLock(targetUrl),
-      API_TIMEOUT,
-      "Lock acquisition timed out"
-    );
-    if (!lockAcquired) {
-      // Another request is processing this URL, check for existing job
-      const queryPromise = supabase
-        .from("audit_jobs")
-        .select("id")
-        .eq("url", targetUrl)
-        .in("status", ["pending", "running"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      const queryResult = await withTimeout(
-        queryPromise as unknown as Promise<any>,
-        DB_QUERY_TIMEOUT,
-        "Database query timed out"
-      );
-      const existingRunning = queryResult.data;
-
-      if (existingRunning) {
-        return NextResponse.json({ jobId: existingRunning.id });
-      }
-      // If no job found but lock exists, wait a bit and retry or return error
-      return NextResponse.json(
-        { error: "Request already in progress for this URL" },
-        { status: 409 }
-      );
-    }
-
-    try {
-      // Check for running/pending job with same URL (double-check after acquiring lock)
-      const queryPromise1 = supabase
-        .from("audit_jobs")
-        .select("id")
-        .eq("url", targetUrl)
-        .in("status", ["pending", "running"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      const queryResult1 = await withTimeout(
-        queryPromise1 as unknown as Promise<any>,
-        DB_QUERY_TIMEOUT,
-        "Database query timed out"
-      );
-      const existingRunning = queryResult1.data;
-
-      if (existingRunning) {
-        await withTimeout(
-          releaseLock(targetUrl),
-          API_TIMEOUT,
-          "Lock release timed out"
-        );
-        return NextResponse.json({ jobId: existingRunning.id });
-      }
-
-      // 24h caching: Check for recently completed job
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const queryPromise2 = supabase
-      .from("audit_jobs")
-      .select("id")
-      .eq("url", targetUrl)
-      .eq("status", "done")
-      .gte("created_at", oneDayAgo)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-    const queryResult2 = await withTimeout(
-      queryPromise2 as unknown as Promise<any>,
-      DB_QUERY_TIMEOUT,
-      "Database query timed out"
-    );
-    const existingCompleted = queryResult2.data;
-
-      if (existingCompleted) {
-        await withTimeout(
-          releaseLock(targetUrl),
-          API_TIMEOUT,
-          "Lock release timed out"
-        );
-        return NextResponse.json({ jobId: existingCompleted.id });
-      }
-
-    // Create new job
-    const jobId = uuidv4();
-    const insertPromise = supabase
-      .from("audit_jobs")
-      .insert({
-        id: jobId,
-        url: targetUrl,
-        status: "pending",
-        stage: 0,
-        results: null,
-      })
-      .select()
-      .single();
-    const { data: job, error: insertError } = await withTimeout(
-      insertPromise as unknown as Promise<any>,
-      DB_QUERY_TIMEOUT,
-      "Database query timed out"
-    );
-
-    if (insertError || !job) {
-      console.error("Error creating audit job:", insertError);
-      return NextResponse.json(
-        { error: insertError?.message || "Failed to create audit job" },
-        { status: 500 }
-      );
-    }
-
-      // Enqueue for processing
-      await withTimeout(
-        auditQueue.enqueue(jobId, targetUrl),
-        API_TIMEOUT,
-        "Queue enqueue timed out"
-      );
-
-      // Immediately trigger worker processing
-      // Use the request URL to determine base URL dynamically
-      const requestUrl = new URL(req.url);
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-        `${requestUrl.protocol}//${requestUrl.host}`;
-      const workerSecret = process.env.WORKER_SECRET;
-
-      console.log(`Triggering worker at: ${baseUrl}/api/worker/process`);
-
-      // Trigger worker immediately (non-blocking, but log the attempt)
-      const triggerPromise = fetch(`${baseUrl}/api/worker/process`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(workerSecret ? { 'x-worker-secret': workerSecret } : {}),
-        },
-      });
-
-      // Don't await, but log result for debugging
-      triggerPromise
-        .then((res) => {
-          console.log(`Worker trigger response: ${res.status} ${res.statusText}`);
-          if (!res.ok) {
-            return res.text().then(text => {
-              console.error(`Worker trigger failed: ${res.status} - ${text}`);
-            });
-          }
-        })
-        .catch((err) => {
-          // Fire-and-forget: if immediate trigger fails, cron will pick it up
-          console.error('Immediate worker trigger failed:', err.message || err);
-          console.log('Job will be picked up by cron or next worker invocation');
-        });
-
-      // Release lock after enqueueing
-      await withTimeout(
-        releaseLock(targetUrl),
-        API_TIMEOUT,
-        "Lock release timed out"
-      );
-
-      return NextResponse.json(
-        { jobId },
-        {
-          status: 201,
-          headers: {
-            "X-RateLimit-Limit": "10",
-            "X-RateLimit-Remaining": rateLimit.remaining.toString(),
-            "X-RateLimit-Reset": rateLimit.resetAt.toString(),
-          },
-        }
-      );
-    } catch (error) {
-      // Release lock on error (with timeout protection)
+    // Execute all stages synchronously with hard timeout
+    const auditPromise = (async () => {
       try {
-        await withTimeout(
-          releaseLock(targetUrl),
-          API_TIMEOUT,
-          "Lock release timed out"
-        );
-      } catch (releaseError) {
-        console.error("Error releasing lock:", releaseError);
+        // Stage 1: Fast Pass - Basic audit data
+        const stage1Results = await processStage1Sync(targetUrl);
+        
+        // Check if we've exceeded timeout
+        if (Date.now() - startTime > HARD_TIMEOUT) {
+          return {
+            ...stage1Results,
+            partialAudit: true,
+          };
+        }
+
+        // If Stage 1 returned partial audit (blocked site), return early
+        if (stage1Results.partialAudit) {
+          return stage1Results;
+        }
+
+        // Stage 2: Structure + Media
+        const stage2Results = await processStage2Sync(stage1Results, US_STATES);
+        
+        // Check if we've exceeded timeout
+        if (Date.now() - startTime > HARD_TIMEOUT) {
+          return {
+            ...stage2Results,
+            partialAudit: true,
+          };
+        }
+
+        // Stage 3: AI Optimization
+        const finalResults = await processStage3Sync(stage2Results);
+        
+        return finalResults;
+      } catch (error: any) {
+        console.error("Error during audit execution:", error);
+        // Return partial results with error
+        return {
+          url: targetUrl,
+          finalUrl: targetUrl,
+          status: 0,
+          partialAudit: true,
+        };
       }
-      throw error;
-    }
-  } catch (error: any) {
-    console.error("Error creating audit job:", error);
+    })();
+
+    // Race against hard timeout
+    const results = await Promise.race([
+      auditPromise,
+      new Promise<typeof auditPromise extends Promise<infer T> ? T : never>((_, reject) =>
+        setTimeout(() => reject(new Error("Request timeout - audit exceeded maximum time")), HARD_TIMEOUT)
+      ),
+    ]).catch((error) => {
+      console.error("Audit timeout or error:", error);
+      return {
+        url: targetUrl,
+        finalUrl: targetUrl,
+        status: 0,
+        partialAudit: true,
+      };
+    });
+
+    // Return results directly
     return NextResponse.json(
-      { error: error?.message || "Failed to create audit job" },
+      { results },
+      { status: 200 }
+    );
+  } catch (error: any) {
+    console.error("Error in audit API route:", error);
+    return NextResponse.json(
+      { error: error?.message || "Failed to process audit" },
       { status: 500 }
     );
   }

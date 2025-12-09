@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useRef, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import React, { useEffect, useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type ScoringConfig } from "@/lib/scoring";
 import scoringConfig from "@/lib/scoring-config.json";
@@ -40,9 +40,7 @@ type AIMetrics = {
 };
 
 function ReportPageContent() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const jobId = searchParams.get("jobId") || "";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [auditData, setAuditData] = useState<AuditData | null>(null);
@@ -51,15 +49,7 @@ function ReportPageContent() {
   const [states, setStates] = useState<any[]>([]);
   const [aiMetrics, setAiMetrics] = useState<AIMetrics | null>(null);
   const [mediaMetrics, setMediaMetrics] = useState<any>(null);
-  const [jobStatus, setJobStatus] = useState<string>("pending");
-  const [jobStage, setJobStage] = useState<number>(0);
   const [partialAudit, setPartialAudit] = useState<boolean>(false);
-  const isPollingRef = useRef<boolean>(true);
-
-  // Debug logging
-  useEffect(() => {
-    console.log("ReportPageContent mounted, jobId from searchParams:", jobId);
-  }, [jobId]);
 
   // Helper function to truncate URL at domain extension
   const truncateUrlAtDomain = (url: string): string => {
@@ -95,68 +85,20 @@ function ReportPageContent() {
       }
     };
     loadStates();
-  }, []);
 
-  // Poll job status every 2-3 seconds
-  useEffect(() => {
-    if (!jobId) {
-      console.log("No jobId provided, setting error");
-      setError("No job ID provided");
-      setLoading(false);
-      return;
-    }
-
-    let pollInterval: NodeJS.Timeout | null = null;
-    isPollingRef.current = true;
-
-    const pollJobStatus = async () => {
-      // Early return if polling should stop
-      if (!isPollingRef.current) {
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/audit/${jobId}`);
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            setError("Job not found");
-            setLoading(false);
-            isPollingRef.current = false;
-            if (pollInterval) {
-              clearInterval(pollInterval);
-            }
-            return;
-          }
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const job = await response.json();
-        console.log("Job status:", job.status, "Stage:", job.stage);
-
-        setJobStatus(job.status);
-        setJobStage(job.stage || 0);
-        setPartialAudit(job.partialAudit || job.partial_audit || false);
-
-        // Stop polling if job is in terminal state
-        if (job.status === "error" || job.status === "done") {
-          isPollingRef.current = false;
-          if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-          }
-        }
-
-        if (job.status === "error") {
-          setError(job.errorMessage || "Job processing failed");
-          setLoading(false);
-          return;
-        }
-
-        if (job.status === "done") {
-          // Job is complete, process results (may be partial)
-          const results = job.results || {};
+    // Load results from sessionStorage
+    if (typeof window !== 'undefined') {
+      const resultsJson = sessionStorage.getItem('auditResults');
+      if (resultsJson) {
+        try {
+          const results = JSON.parse(resultsJson);
+          
+          // Clear sessionStorage after reading
+          sessionStorage.removeItem('auditResults');
+          
+          // Process results
           setFinalUrl(results.finalUrl || results.url || "");
+          setPartialAudit(results.partialAudit || false);
           
           // Set API data structure for compatibility
           setApiData({
@@ -184,7 +126,7 @@ function ReportPageContent() {
             });
           }
 
-          // Use scores from job results (already calculated server-side)
+          // Use scores from results (already calculated server-side)
           setAuditData({
             ...parsed,
             titleTag: results.titleTag || parsed.titleTag || "Title Tag",
@@ -219,112 +161,18 @@ function ReportPageContent() {
           }
 
           setLoading(false);
-          return;
-        }
-
-        // Job is still processing, show partial results if available
-        if (job.results && (job.status === "running" || job.status === "pending")) {
-          const results = job.results;
-          setFinalUrl(results.finalUrl || results.url || "");
-          
-          // Show partial results during processing
-          if (results.html) {
-            const html = results.html;
-            const parsed = parseHTML(html, {
-              robotsTxt: results.robotsTxt,
-              robotsStatus: results.robotsStatus,
-              sitemapXml: results.sitemapXml,
-              sitemapStatus: results.sitemapStatus,
-            });
-
-            setApiData({
-              success: true,
-              url: results.url,
-              finalUrl: results.finalUrl || results.url,
-              status: results.status || 200,
-              html: html,
-              robotsTxt: results.robotsTxt,
-              robotsStatus: results.robotsStatus,
-              sitemapXml: results.sitemapXml,
-              sitemapStatus: results.sitemapStatus,
-            });
-
-            // Show partial data if scores are available
-            if (results.seoScore !== undefined) {
-              setAuditData({
-                ...parsed,
-                titleTag: results.titleTag || parsed.titleTag || "Title Tag",
-                metaDescription: results.metaDescription || parsed.metaDescription || "Missing",
-                metaDescriptionWordCount: results.metaDescriptionWordCount || parsed.metaDescriptionWordCount || 0,
-                h1Count: results.h1Count || parsed.h1Count || 0,
-                h1Texts: results.h1Texts || parsed.h1Texts || [],
-                wordCount: results.wordCount || parsed.wordCount || 0,
-                favicon: results.favicon !== undefined ? results.favicon : (parsed.favicon || false),
-                canonicalTag: results.canonicalTag || parsed.canonicalTag || "Missing",
-                robotsTxt: results.robotsTxtFound !== undefined ? results.robotsTxtFound : (parsed.robotsTxt || false),
-                sitemapXml: results.sitemapXmlFound !== undefined ? results.sitemapXmlFound : (parsed.sitemapXml || false),
-                altCoverage: results.altCoverage || parsed.altCoverage || "No images",
-                seoScore: results.seoScore || 0,
-                titleScoreRaw: results.titleScoreRaw || 0,
-                titleScore10: results.titleScore10 || 0,
-                titleStatus: results.titleStatus || "bad",
-                mediaScoreRaw: results.mediaScoreRaw || 0,
-                mediaScore10: results.mediaScore10 || 0,
-                mediaStatus: results.mediaStatus || "bad",
-                aiScoreRaw: results.aiScoreRaw || 0,
-                aiScore10: results.aiScore10 || 0,
-                aiStatus: results.aiStatus || "bad",
-              });
-
-              if (results.mediaMetrics) {
-                setMediaMetrics(results.mediaMetrics);
-              }
-              if (results.aiMetrics) {
-                setAiMetrics(results.aiMetrics);
-              }
-            }
-          }
-        }
-
-      } catch (err: any) {
-        console.error("Error polling job status:", err);
-        if (isPollingRef.current) {
-          setError(err?.message || "Unknown error occurred");
+        } catch (err) {
+          console.error("Error parsing results from sessionStorage:", err);
+          setError("Failed to load audit results");
           setLoading(false);
-          isPollingRef.current = false;
-          if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-          }
         }
-      }
-    };
-
-    // Initial poll
-    pollJobStatus();
-
-    // Set up polling interval (every 2.5 seconds)
-    pollInterval = setInterval(() => {
-      if (isPollingRef.current) {
-        pollJobStatus();
       } else {
-        // Stop interval if polling should stop
-        if (pollInterval) {
-          clearInterval(pollInterval);
-          pollInterval = null;
-        }
+        // No results found in sessionStorage
+        setError("No audit results found. Please submit a URL from the homepage.");
+        setLoading(false);
       }
-    }, 2500);
-
-    // Cleanup
-    return () => {
-      isPollingRef.current = false;
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      }
-    };
-  }, [jobId]);
+    }
+  }, []);
 
   const parseHTML = (html: string, apiData: any): Omit<AuditData, "seoScore" | "titleScoreRaw" | "titleScore10" | "titleStatus" | "mediaScoreRaw" | "mediaScore10" | "mediaStatus" | "aiScoreRaw" | "aiScore10" | "aiStatus"> => {
     const parser = new DOMParser();
@@ -719,29 +567,13 @@ function ReportPageContent() {
     return "bg-red-500";
   };
 
-  if (loading || (jobStatus !== "done" && jobStatus !== "error")) {
-    const stageMessages = [
-      "Initializing...",
-      "Stage 1: Fast Pass - Fetching page data...",
-      "Stage 2: Structure & Media - Analyzing content...",
-      "Stage 3: AI Optimization - Processing AI metrics...",
-    ];
-    const currentMessage = stageMessages[jobStage] || "Processing...";
-    
+  if (loading) {
     return (
       <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
         <div className="text-center">
           <div className="text-2xl font-bold text-white mb-4">Loading Audit Results...</div>
-          <div className="text-gray-400 mb-4">{currentMessage}</div>
           <div className="flex justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
-          </div>
-          <div className="text-gray-500 text-sm mt-4">
-            {jobStatus === "pending" 
-              ? "Job queued, starting soon..." 
-              : jobStatus === "running"
-              ? "This may take up to 3 minutes..."
-              : "Processing..."}
           </div>
         </div>
       </div>
@@ -895,7 +727,7 @@ function ReportPageContent() {
   return (
     <div className="min-h-screen bg-zinc-900">
       {/* Partial Audit Warning Banner */}
-      {partialAudit && jobStage === 1 && jobStatus === "done" && (
+      {partialAudit && (
         <div className="bg-yellow-600 border-b border-yellow-700 px-6 py-4">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center gap-3">

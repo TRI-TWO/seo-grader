@@ -8,7 +8,9 @@ type TabType = "home" | "pricing" | "about";
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("home");
   const [urlInput, setUrlInput] = useState("");
-  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleUrlSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>) => {
     if (e) {
@@ -20,11 +22,15 @@ export default function Home() {
       return;
     }
 
+    setLoading(true);
+    setError(null);
+    setResults(null);
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout (API has 25s max)
     
     try {
-      // POST to /api/audit to create job with timeout
+      // POST to /api/audit to execute audit synchronously
       const response = await fetch("/api/audit", {
         method: "POST",
         headers: {
@@ -38,32 +44,53 @@ export default function Home() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-        console.error("Error creating audit job:", errorData);
-        alert(errorData.error || "Failed to create audit job. Please try again.");
+        console.error("Error executing audit:", errorData);
+        setError(errorData.error || "Failed to execute audit. Please try again.");
+        setLoading(false);
         return;
       }
 
-      const { jobId } = await response.json();
-      if (!jobId) {
-        console.error("No jobId returned from API");
-        alert("Failed to create audit job. Please try again.");
+      const { results: auditResults } = await response.json();
+      if (!auditResults) {
+        console.error("No results returned from API");
+        setError("Failed to execute audit. Please try again.");
+        setLoading(false);
         return;
       }
 
-      // Redirect to report page with jobId
-      const reportUrl = `/report?jobId=${encodeURIComponent(jobId)}`;
-      console.log("Navigating to:", reportUrl);
-      router.push(reportUrl);
+      // Set results and render report
+      setResults(auditResults);
+      setLoading(false);
     } catch (err: any) {
       clearTimeout(timeoutId);
       console.error("Error submitting URL:", err);
+      setLoading(false);
       if (err.name === "AbortError") {
-        alert("Request timed out. Please try again.");
+        setError("Request timed out. Please try again.");
       } else {
-        alert("An error occurred. Please try again.");
+        setError("An error occurred. Please try again.");
       }
     }
   };
+
+  // If results are available, navigate to report page with results in state
+  // We'll use sessionStorage to pass results to the report page
+  if (results) {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('auditResults', JSON.stringify(results));
+      window.location.href = '/report';
+    }
+    return (
+      <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-white mb-4">Loading Report...</div>
+          <div className="flex justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-900 text-white relative overflow-hidden">
@@ -188,16 +215,39 @@ export default function Home() {
                         handleUrlSubmit(e);
                       }
                     }}
-                    className="flex-1 px-6 py-4 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    disabled={loading}
+                    className="flex-1 px-6 py-4 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   <button
                     type="button"
                     onClick={handleUrlSubmit}
-                    className="px-8 py-4 bg-[#8B4513] hover:bg-[#A0522D] text-white font-semibold rounded-lg transition-colors"
+                    disabled={loading}
+                    className="px-8 py-4 bg-[#8B4513] hover:bg-[#A0522D] text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Free
+                    {loading ? "Processing..." : "Free"}
                   </button>
                 </form>
+                
+                {/* Loading State */}
+                {loading && (
+                  <div className="mt-8 text-center">
+                    <div className="text-xl text-gray-300 mb-4">Running SEO audit...</div>
+                    <div className="flex justify-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
+                    </div>
+                    <div className="text-gray-400 text-sm mt-4">This may take up to 25 seconds</div>
+                  </div>
+                )}
+                
+                {/* Error State */}
+                {error && !loading && (
+                  <div className="mt-8 max-w-2xl mx-auto">
+                    <div className="bg-red-600 border border-red-700 rounded-lg px-6 py-4">
+                      <div className="text-white font-semibold mb-2">Error</div>
+                      <div className="text-red-100">{error}</div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Pricing / Tier Section */}

@@ -17,16 +17,9 @@ export const runtime = "nodejs";
  */
 export async function GET(req: NextRequest) {
   try {
-    // Check for worker secret (optional, for security)
-    const secret = req.headers.get('x-worker-secret');
-    const workerSecret = process.env.WORKER_SECRET;
-
-    if (workerSecret && secret !== workerSecret) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    // Manual trigger endpoint - no authentication required for GET requests
+    // This allows easy manual triggering for debugging
+    // The actual worker process endpoint still requires auth
 
     // Get base URL for worker process endpoint
     const requestUrl = new URL(req.url);

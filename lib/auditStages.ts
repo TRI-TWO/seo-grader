@@ -875,7 +875,6 @@ export async function processAuditJob(jobId: string, url: string, startFromStage
     console.log(`processAuditJob: Started processing job ${jobId} from stage ${startFromStage}`);
 
     // Load states - try to fetch from API, fallback to empty array
-  try {
     // Load states - try to fetch from API, fallback to empty array
     let states: any[] = [];
     try {

@@ -202,24 +202,39 @@ export async function POST(req: NextRequest) {
         "Queue enqueue timed out"
       );
 
-      // Immediately trigger worker processing (fire-and-forget)
-      // This ensures jobs process immediately instead of waiting for cron
+      // Immediately trigger worker processing
+      // Use the request URL to determine base URL dynamically
+      const requestUrl = new URL(req.url);
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+        `${requestUrl.protocol}//${requestUrl.host}`;
       const workerSecret = process.env.WORKER_SECRET;
 
-      // Trigger worker immediately (non-blocking)
-      fetch(`${baseUrl}/api/worker/process`, {
+      console.log(`Triggering worker at: ${baseUrl}/api/worker/process`);
+
+      // Trigger worker immediately (non-blocking, but log the attempt)
+      const triggerPromise = fetch(`${baseUrl}/api/worker/process`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(workerSecret ? { 'x-worker-secret': workerSecret } : {}),
         },
-      }).catch((err) => {
-        // Fire-and-forget: if immediate trigger fails, cron will pick it up
-        console.error('Immediate worker trigger failed:', err.message || err);
-        console.log('Job will be picked up by cron or next worker invocation');
       });
+
+      // Don't await, but log result for debugging
+      triggerPromise
+        .then((res) => {
+          console.log(`Worker trigger response: ${res.status} ${res.statusText}`);
+          if (!res.ok) {
+            return res.text().then(text => {
+              console.error(`Worker trigger failed: ${res.status} - ${text}`);
+            });
+          }
+        })
+        .catch((err) => {
+          // Fire-and-forget: if immediate trigger fails, cron will pick it up
+          console.error('Immediate worker trigger failed:', err.message || err);
+          console.log('Job will be picked up by cron or next worker invocation');
+        });
 
       // Release lock after enqueueing
       await withTimeout(

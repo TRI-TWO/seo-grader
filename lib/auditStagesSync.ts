@@ -1,24 +1,11 @@
-/**
- * Staged Audit Processing
- * 
- * Splits scraping and analysis into 3 stages to support large sites:
- * - Stage 1: Fast pass (basic audit data)
- * - Stage 2: Structure + Media (deeper checks)
- * - Stage 3: AI Optimization (heavier NLP analysis)
- */
-
-import { supabase } from "./supabase";
 import { JSDOM } from "jsdom";
 import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type ScoringConfig } from "./scoring";
 import scoringConfig from "./scoring-config.json";
 
-// Timeout constants
-const FETCH_TIMEOUT = 10000; // 10 seconds (as per requirements)
-const AI_ANALYSIS_TIMEOUT = 8000; // 8 seconds (as per requirements)
-const TOTAL_JOB_TIMEOUT = 180000; // 3 minutes
-const ROBOTS_FETCH_TIMEOUT = 5000; // 5 seconds for robots.txt fallback
+const FETCH_TIMEOUT = 5000;
+const AI_ANALYSIS_TIMEOUT = 8000;
+const ROBOTS_FETCH_TIMEOUT = 3000;
 
-// Browser header profiles for retry logic
 const BROWSER_HEADER_PROFILE_A = {
   "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -37,9 +24,7 @@ const BROWSER_HEADER_PROFILE_B = {
   Pragma: "no-cache",
 };
 
-
 export type AuditResults = {
-  // Stage 1 results
   url?: string;
   finalUrl?: string;
   status?: number;
@@ -49,8 +34,6 @@ export type AuditResults = {
   robotsStatus?: number | null;
   sitemapXml?: string | null;
   sitemapStatus?: number | null;
-  
-  // Parsed data
   titleTag?: string;
   metaDescription?: string;
   metaDescriptionWordCount?: number;
@@ -62,8 +45,6 @@ export type AuditResults = {
   robotsTxtFound?: boolean;
   sitemapXmlFound?: boolean;
   altCoverage?: string;
-  
-  // Scores
   titleScoreRaw?: number;
   titleScore10?: number;
   titleStatus?: "good" | "warn" | "bad";
@@ -76,78 +57,49 @@ export type AuditResults = {
   aiScore10?: number;
   aiStatus?: "good" | "warn" | "bad";
   seoScore?: number;
-  
-  // Media metrics
   mediaMetrics?: any;
   aiMetrics?: any;
-  
-  // Flags
   partialAudit?: boolean;
   aiOptimizationTimeout?: boolean;
 };
 
-
-/**
- * Parse robots.txt for sitemap URLs and basic crawl directives
- */
 function parseRobotsTxt(robotsTxt: string): { sitemaps: string[]; crawlAllowed: boolean } {
   const sitemaps: string[] = [];
   let crawlAllowed = true;
-  
-  if (!robotsTxt) {
-    return { sitemaps, crawlAllowed };
-  }
-  
-  const lines = robotsTxt.split('\n');
+  if (!robotsTxt) return { sitemaps, crawlAllowed };
+
+  const lines = robotsTxt.split("\n");
   let inUserAgentBlock = false;
-  let currentUserAgent = '';
-  
+  let currentUserAgent = "";
+
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
     const lowerLine = trimmed.toLowerCase();
-    
-    // Check for Sitemap directive
-    if (lowerLine.startsWith('sitemap:')) {
+
+    if (lowerLine.startsWith("sitemap:")) {
       const sitemapUrl = trimmed.substring(8).trim();
-      if (sitemapUrl) {
-        sitemaps.push(sitemapUrl);
-      }
+      if (sitemapUrl) sitemaps.push(sitemapUrl);
       continue;
     }
-    
-    // Check for User-agent directive
-    if (lowerLine.startsWith('user-agent:')) {
+
+    if (lowerLine.startsWith("user-agent:")) {
       currentUserAgent = trimmed.substring(11).trim().toLowerCase();
-      inUserAgentBlock = currentUserAgent === '*' || currentUserAgent === '';
+      inUserAgentBlock = currentUserAgent === "*" || currentUserAgent === "";
       continue;
     }
-    
-    // Check for Disallow in * user-agent block
-    if (inUserAgentBlock && lowerLine.startsWith('disallow:')) {
+
+    if (inUserAgentBlock && lowerLine.startsWith("disallow:")) {
       const path = trimmed.substring(9).trim();
-      if (path === '/') {
-        crawlAllowed = false;
-      }
+      if (path === "/") crawlAllowed = false;
     }
   }
-  
+
   return { sitemaps, crawlAllowed };
 }
 
-
-/**
- * Stage 1: Fast Pass - Basic audit data
- */
-export async function processStage1(jobId: string, url: string): Promise<Partial<AuditResults>> {
-  // Update status
-  await supabase
-    .from("audit_jobs")
-    .update({ status: "running", stage: 1 })
-    .eq("id", jobId);
-
-  // Normalize URL
+export async function processStage1Sync(url: string): Promise<Partial<AuditResults>> {
   let targetUrl = url.trim();
   if (!/^https?:\/\//i.test(targetUrl)) {
     targetUrl = "https://" + targetUrl;
@@ -157,32 +109,25 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
   try {
     parsed = new URL(targetUrl);
   } catch {
-    // Invalid URL - mark as done with partial audit
-    await supabase
-      .from("audit_jobs")
-      .update({
-        status: "done",
-        stage: 1,
-        partial_audit: true,
-        error_message: "Invalid URL",
-      })
-      .eq("id", jobId);
-    return {};
+    return {
+      url,
+      finalUrl: targetUrl,
+      status: 0,
+      partialAudit: true,
+    };
   }
 
   const origin = parsed.origin;
   let pageRes: Response | null = null;
-  let html: string = "";
-  let finalUrl: string = targetUrl;
+  let html = "";
+  let finalUrl = targetUrl;
   let contentType: string | null = null;
-  let status: number = 0;
+  let status = 0;
   let fetchSuccess = false;
 
-  // Attempt 1: Profile A (Chrome on Mac)
   try {
     const controller1 = new AbortController();
     const timeoutId1 = setTimeout(() => controller1.abort(), FETCH_TIMEOUT);
-    
     try {
       pageRes = await fetch(parsed.toString(), {
         method: "GET",
@@ -192,7 +137,6 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
         signal: controller1.signal,
       });
       clearTimeout(timeoutId1);
-      
       if (pageRes.ok || (pageRes.status >= 200 && pageRes.status < 500)) {
         html = await pageRes.text();
         finalUrl = pageRes.url;
@@ -200,20 +144,15 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
         status = pageRes.status;
         fetchSuccess = true;
       }
-    } catch (error) {
+    } catch {
       clearTimeout(timeoutId1);
-      // First attempt failed, will retry
     }
-  } catch (error) {
-    // First attempt failed, will retry
-  }
+  } catch {}
 
-  // Attempt 2: Profile B (Chrome on Windows) if first attempt failed
   if (!fetchSuccess) {
     try {
       const controller2 = new AbortController();
       const timeoutId2 = setTimeout(() => controller2.abort(), FETCH_TIMEOUT);
-      
       try {
         pageRes = await fetch(parsed.toString(), {
           method: "GET",
@@ -223,7 +162,6 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
           signal: controller2.signal,
         });
         clearTimeout(timeoutId2);
-        
         if (pageRes.ok || (pageRes.status >= 200 && pageRes.status < 500)) {
           html = await pageRes.text();
           finalUrl = pageRes.url;
@@ -231,16 +169,12 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
           status = pageRes.status;
           fetchSuccess = true;
         }
-      } catch (error) {
+      } catch {
         clearTimeout(timeoutId2);
-        // Second attempt also failed
       }
-    } catch (error) {
-      // Both attempts failed
-    }
+    } catch {}
   }
 
-  // If both HTML fetch attempts failed, try robots.txt fallback
   let robotsTxt: string | null = null;
   let robotsStatus: number | null = null;
   let sitemapXml: string | null = null;
@@ -248,11 +182,9 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
   let technicalData: any = {};
 
   if (!fetchSuccess) {
-    // Attempt to fetch robots.txt for technical-only partial audit
     try {
       const robotsController = new AbortController();
       const robotsTimeoutId = setTimeout(() => robotsController.abort(), ROBOTS_FETCH_TIMEOUT);
-      
       try {
         const robotsRes = await fetch(origin + "/robots.txt", {
           method: "GET",
@@ -262,11 +194,10 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
           signal: robotsController.signal,
         });
         clearTimeout(robotsTimeoutId);
-        
+
         robotsStatus = robotsRes.status;
         if (robotsRes.ok) {
           robotsTxt = await robotsRes.text();
-          // Parse robots.txt for sitemaps and crawl directives
           const parsedRobots = parseRobotsTxt(robotsTxt);
           technicalData = {
             robots: {
@@ -276,18 +207,17 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
             sitemaps: parsedRobots.sitemaps,
           };
         }
-      } catch (error) {
+      } catch {
         clearTimeout(robotsTimeoutId);
         robotsTxt = null;
         robotsStatus = null;
       }
-    } catch (error) {
+    } catch {
       robotsTxt = null;
       robotsStatus = null;
     }
 
-    // Mark as done with partial audit
-    const partialResults: Partial<AuditResults> = {
+    return {
       url,
       finalUrl: targetUrl,
       status: 0,
@@ -298,23 +228,8 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
       ...(Object.keys(technicalData).length > 0 ? { technical: technicalData } : {}),
       partialAudit: true,
     };
-
-    await supabase
-      .from("audit_jobs")
-      .update({
-        status: "done",
-        stage: 1,
-        partial_audit: true,
-        error_message: "Stage 1 timeout / blocked by site",
-        results: partialResults as any,
-      })
-      .eq("id", jobId);
-
-    return partialResults;
   }
 
-  // HTML fetch succeeded - continue with normal processing
-  // Fetch robots.txt and sitemap.xml (existing logic)
   try {
     const robotsRes = await fetch(origin + "/robots.txt", {
       method: "GET",
@@ -349,7 +264,6 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
     sitemapStatus = null;
   }
 
-  // Parse HTML for basic data
   const doc = new JSDOM(html).window.document;
 
   const titleEl = doc.querySelector("title");
@@ -357,9 +271,10 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
 
   const metaDesc = doc.querySelector('meta[name="description"]');
   const metaDescription = metaDesc?.getAttribute("content") || "Missing";
-  const metaDescriptionWordCount = metaDescription !== "Missing"
-    ? metaDescription.split(/\s+/).filter(Boolean).length
-    : 0;
+  const metaDescriptionWordCount =
+    metaDescription !== "Missing"
+      ? metaDescription.split(/\s+/).filter(Boolean).length
+      : 0;
 
   const h1s = Array.from(doc.querySelectorAll("h1"));
   const h1Count = h1s.length;
@@ -380,7 +295,7 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
   const hasRobotsTxt = robotsTxt !== null && robotsStatus !== null && robotsStatus < 400;
   const hasSitemapXml = sitemapXml !== null && sitemapStatus !== null && sitemapStatus < 400;
 
-  const results: Partial<AuditResults> = {
+  return {
     url,
     finalUrl,
     status,
@@ -401,34 +316,16 @@ export async function processStage1(jobId: string, url: string): Promise<Partial
     robotsTxtFound: hasRobotsTxt,
     sitemapXmlFound: hasSitemapXml,
   };
-
-  // Save partial results
-  await supabase
-    .from("audit_jobs")
-    .update({ results: results as any })
-    .eq("id", jobId);
-
-  return results;
 }
 
-/**
- * Stage 2: Structure + Media - Deeper checks
- */
-export async function processStage2(
-  jobId: string,
+export async function processStage2Sync(
   stage1Results: Partial<AuditResults>,
   states: any[]
 ): Promise<Partial<AuditResults>> {
   try {
-    await supabase
-      .from("audit_jobs")
-      .update({ stage: 2 })
-      .eq("id", jobId);
-
     const html = stage1Results.html || "";
     const doc = new JSDOM(html).window.document;
 
-    // Extract media metrics
     const images = Array.from(doc.querySelectorAll("img"));
     const totalImages = images.length;
     const imagesWithAlt = images.filter(
@@ -471,7 +368,6 @@ export async function processStage2(
       ogDescriptionPresent,
     };
 
-    // Extract title metrics and score
     const extractKeywords = (text: string, limit = 10): string[] => {
       const STOPWORDS = new Set([
         "the", "and", "or", "but", "if", "a", "an", "to", "of", "in", "on", "for", "with", "at", "by",
@@ -554,7 +450,6 @@ export async function processStage2(
     const titleScores = scoreTitle(titleMetrics, cfg);
     const mediaScores = scoreMedia(mediaMetrics, cfg);
 
-    // Calculate technical score
     let technicalScore = 0;
     if (stage1Results.h1Count === 1) technicalScore += 25;
     else if ((stage1Results.h1Count || 0) > 1) technicalScore += 12;
@@ -576,7 +471,7 @@ export async function processStage2(
       (technicalScore * 0.35)
     );
 
-    const results: Partial<AuditResults> = {
+    return {
       ...stage1Results,
       altCoverage,
       titleScoreRaw: titleScores.raw,
@@ -590,52 +485,24 @@ export async function processStage2(
       seoScore: overallScore,
       mediaMetrics,
     };
-
-    await supabase
-      .from("audit_jobs")
-      .update({ results: results as any })
-      .eq("id", jobId);
-
-    return results;
-  } catch (error: any) {
-    await supabase
-      .from("audit_jobs")
-      .update({
-        status: "error",
-        error_message: error?.message || "Stage 2 failed",
-      })
-      .eq("id", jobId);
-    throw error;
+  } catch {
+    return {
+      ...stage1Results,
+      partialAudit: true,
+    };
   }
 }
 
-/**
- * Stage 3: AI Optimization - Heavier NLP analysis
- */
-export async function processStage3(
-  jobId: string,
+export async function processStage3Sync(
   stage2Results: Partial<AuditResults>
 ): Promise<Partial<AuditResults>> {
-  const startTime = Date.now();
   let aiTimeout = false;
 
   try {
-    await supabase
-      .from("audit_jobs")
-      .update({ stage: 3 })
-      .eq("id", jobId);
-
     const html = stage2Results.html || "";
     const doc = new JSDOM(html).window.document;
     const bodyText = doc.body?.textContent || "";
-    const bodyLower = bodyText.toLowerCase();
 
-    // Check if page is extremely large
-    const htmlSize = html.length;
-    const wordCount = stage2Results.wordCount || 0;
-    const isLargePage = htmlSize > 500000 || wordCount > 5000; // 500KB or 5000 words
-
-    // AI Optimization metrics extraction with timeout protection
     const extractAIMetrics = async (): Promise<any> => {
       return new Promise((resolve) => {
         const timeoutId = setTimeout(() => {
@@ -650,10 +517,8 @@ export async function processStage3(
           });
         }, AI_ANALYSIS_TIMEOUT);
 
-        // Run AI analysis
         (async () => {
           try {
-            // 1. Structured Answer Readiness (0-25)
             let structuredAnswers = 0;
             const hasFAQ = /faq|frequently asked|questions? and answers?/i.test(bodyText);
             const hasQAPattern = /(?:^|\n)\s*[Qq]:|question:|answer:|a:/m.test(bodyText);
@@ -672,7 +537,6 @@ export async function processStage3(
               structuredAnswers = 5;
             }
 
-            // 2. Semantic Clarity & Entity Density (0-20)
             let entityClarity = 0;
             const hasPrimaryEntity = doc.querySelector("h1")?.textContent?.trim() || "";
             const hasSupportingEntities = /(?:location|address|city|state|phone|email|contact|about|services?|products?)/i.test(bodyText);
@@ -689,7 +553,6 @@ export async function processStage3(
               entityClarity = 4;
             }
 
-            // 3. AI Extraction Friendliness (0-20)
             let extractionReadiness = 0;
             const lists = doc.querySelectorAll("ul, ol").length;
             const tables = doc.querySelectorAll("table").length;
@@ -709,7 +572,6 @@ export async function processStage3(
               extractionReadiness = 4;
             }
 
-            // 4. Context Completeness (0-15)
             let contextCompleteness = 0;
             const hasWhat = /(?:what|definition|is|are|means?)/i.test(bodyText);
             const hasWhy = /(?:why|benefits?|advantages?|importance|matters?)/i.test(bodyText);
@@ -731,7 +593,6 @@ export async function processStage3(
               contextCompleteness = 2;
             }
 
-            // 5. AI Trust Signals (0-10)
             let trustSignals = 0;
             const hasAuthor = /(?:author|written by|by [A-Z])/i.test(bodyText) || doc.querySelector('meta[name="author"]');
             const hasAboutLink = Array.from(doc.querySelectorAll("a")).some(a =>
@@ -758,7 +619,6 @@ export async function processStage3(
               trustSignals = 1;
             }
 
-            // 6. Machine Readability & Formatting (0-10)
             let machineReadability = 0;
             const hasHeadingHierarchy = doc.querySelector("h1") && doc.querySelector("h2");
             const hasSemanticHTML = doc.querySelector("main, article, section, nav, header, footer");
@@ -789,7 +649,7 @@ export async function processStage3(
               trustSignals,
               machineReadability,
             });
-          } catch (error) {
+          } catch {
             clearTimeout(timeoutId);
             resolve({
               structuredAnswers: 5,
@@ -817,130 +677,21 @@ export async function processStage3(
     const aiScore10 = Math.round(aiScoreRaw / 10);
     const aiStatus: "good" | "warn" | "bad" = aiScoreRaw >= 80 ? "good" : aiScoreRaw >= 50 ? "warn" : "bad";
 
-    const results: Partial<AuditResults> = {
+    return {
       ...stage2Results,
       aiScoreRaw,
       aiScore10,
       aiStatus,
       aiMetrics,
       aiOptimizationTimeout: aiTimeout,
-      partialAudit: aiTimeout, // Set partial_audit if AI stage timed out
+      partialAudit: aiTimeout || stage2Results.partialAudit,
     };
-
-    await supabase
-      .from("audit_jobs")
-      .update({
-        status: "done",
-        partial_audit: aiTimeout, // Set partial_audit if AI stage timed out
-        results: results as any,
-      })
-      .eq("id", jobId);
-
-    return results;
-  } catch (error: any) {
-    await supabase
-      .from("audit_jobs")
-      .update({
-        status: "error",
-        error_message: error?.message || "Stage 3 failed",
-      })
-      .eq("id", jobId);
-    throw error;
-  }
-}
-
-/**
- * Process all stages for a job
- * Supports resuming from a specific stage (for multi-invoke pattern)
- * 
- * @param jobId - Job ID to process
- * @param url - URL to audit
- * @param startFromStage - Stage to start from (1, 2, or 3). If not provided, starts from stage 1.
- * @param existingResults - Existing results to continue from (if resuming)
- */
-export async function processAuditJob(jobId: string, url: string, startFromStage: number = 1, existingResults?: Partial<AuditResults>): Promise<void> {
-  const startTime = Date.now();
-  let currentResults = existingResults || {};
-  try {
-    // Update status to "running" immediately when processing starts
-    // This ensures the job status is updated even if processStage1 fails early
-    await supabase
-      .from("audit_jobs")
-      .update({ 
-        status: "running",
-        stage: startFromStage || 1,
-      })
-      .eq("id", jobId);
-    
-    console.log(`processAuditJob: Started processing job ${jobId} from stage ${startFromStage}`);
-
-    // Load states - try to fetch from API, fallback to empty array
-    // Load states - try to fetch from API, fallback to empty array
-    let states: any[] = [];
-    try {
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}` 
-        : "http://localhost:3000";
-      const statesRes = await fetch(`${baseUrl}/api/states`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      if (statesRes.ok) {
-        states = await statesRes.json() || [];
-      }
-    } catch {
-      // If states API fails, continue with empty array
-      states = [];
-    }
-
-    // Stage 1: Fast Pass
-    if (startFromStage <= 1) {
-      currentResults = await processStage1(jobId, url);
-
-      // Check timeout
-      if (Date.now() - startTime > TOTAL_JOB_TIMEOUT) {
-        await supabase
-          .from("audit_jobs")
-          .update({
-            status: "done",
-            partial_audit: true,
-            results: { ...currentResults, partialAudit: true } as any,
-          })
-          .eq("id", jobId);
-        return;
-      }
-    }
-
-    // Stage 2: Structure + Media
-    if (startFromStage <= 2) {
-      currentResults = await processStage2(jobId, currentResults, states);
-
-      // Check timeout
-      if (Date.now() - startTime > TOTAL_JOB_TIMEOUT) {
-        await supabase
-          .from("audit_jobs")
-          .update({
-            status: "done",
-            partial_audit: true,
-            results: { ...currentResults, partialAudit: true } as any,
-          })
-          .eq("id", jobId);
-        return;
-      }
-    }
-
-    // Stage 3: AI Optimization
-    if (startFromStage <= 3) {
-      await processStage3(jobId, currentResults);
-    }
-  } catch (error: any) {
-    await supabase
-      .from("audit_jobs")
-      .update({
-        status: "error",
-        error_message: error?.message || "Job processing failed",
-      })
-      .eq("id", jobId);
-    throw error;
+  } catch {
+    return {
+      ...stage2Results,
+      partialAudit: true,
+      aiOptimizationTimeout: true,
+    };
   }
 }
 

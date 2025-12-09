@@ -50,13 +50,24 @@ export default function Home() {
         return;
       }
 
-      const { results: auditResults } = await response.json();
+      const responseData = await response.json();
+      console.log("API response:", responseData);
+      
+      const auditResults = responseData.results;
       if (!auditResults) {
-        console.error("No results returned from API");
+        console.error("No results returned from API. Response:", responseData);
         setError("Failed to execute audit. Please try again.");
         setLoading(false);
         return;
       }
+
+      console.log("Results received:", {
+        hasSeoScore: !!auditResults.seoScore,
+        hasTitleScore: !!auditResults.titleScoreRaw,
+        hasMediaScore: !!auditResults.mediaScoreRaw,
+        hasAiScore: !!auditResults.aiScoreRaw,
+        partialAudit: auditResults.partialAudit,
+      });
 
       // Set results and render report
       setResults(auditResults);

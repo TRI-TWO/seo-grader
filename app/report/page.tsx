@@ -89,9 +89,19 @@ function ReportPageContent() {
     // Load results from sessionStorage
     if (typeof window !== 'undefined') {
       const resultsJson = sessionStorage.getItem('auditResults');
+      console.log("Loading from sessionStorage:", { hasResults: !!resultsJson });
+      
       if (resultsJson) {
         try {
           const results = JSON.parse(resultsJson);
+          console.log("Parsed results:", {
+            hasSeoScore: !!results.seoScore,
+            hasTitleScore: !!results.titleScoreRaw,
+            hasMediaScore: !!results.mediaScoreRaw,
+            hasAiScore: !!results.aiScoreRaw,
+            partialAudit: results.partialAudit,
+            url: results.url,
+          });
           
           // Clear sessionStorage after reading
           sessionStorage.removeItem('auditResults');

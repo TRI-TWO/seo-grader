@@ -159,6 +159,15 @@ export async function POST(req: NextRequest) {
     });
 
     // Return results directly
+    console.log("API returning results:", {
+      hasResults: !!results,
+      hasSeoScore: !!results?.seoScore,
+      hasTitleScore: !!results?.titleScoreRaw,
+      hasMediaScore: !!results?.mediaScoreRaw,
+      hasAiScore: !!results?.aiScoreRaw,
+      partialAudit: results?.partialAudit,
+    });
+    
     return NextResponse.json(
       { results },
       { status: 200 }

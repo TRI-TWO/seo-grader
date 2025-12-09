@@ -861,7 +861,20 @@ export async function processStage3(
 export async function processAuditJob(jobId: string, url: string, startFromStage: number = 1, existingResults?: Partial<AuditResults>): Promise<void> {
   const startTime = Date.now();
   let currentResults = existingResults || {};
+  try {
+    // Update status to "running" immediately when processing starts
+    // This ensures the job status is updated even if processStage1 fails early
+    await supabase
+      .from("audit_jobs")
+      .update({ 
+        status: "running",
+        stage: startFromStage || 1,
+      })
+      .eq("id", jobId);
+    
+    console.log(`processAuditJob: Started processing job ${jobId} from stage ${startFromStage}`);
 
+    // Load states - try to fetch from API, fallback to empty array
   try {
     // Load states - try to fetch from API, fallback to empty array
     let states: any[] = [];

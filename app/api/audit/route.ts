@@ -208,12 +208,17 @@ export async function POST(req: NextRequest) {
         (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
       const workerSecret = process.env.WORKER_SECRET;
 
+      // Trigger worker immediately (non-blocking)
       fetch(`${baseUrl}/api/worker/process`, {
         method: 'POST',
-        headers: workerSecret ? { 'x-worker-secret': workerSecret } : {},
-      }).catch(() => {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(workerSecret ? { 'x-worker-secret': workerSecret } : {}),
+        },
+      }).catch((err) => {
         // Fire-and-forget: if immediate trigger fails, cron will pick it up
-        console.log('Immediate worker trigger failed, will be picked up by cron');
+        console.error('Immediate worker trigger failed:', err.message || err);
+        console.log('Job will be picked up by cron or next worker invocation');
       });
 
       // Release lock after enqueueing

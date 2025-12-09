@@ -33,11 +33,14 @@ async function runWorker(req: NextRequest): Promise<NextResponse> {
 
     // Only check secret if it's configured (allows development without secret)
     if (workerSecret && secret !== workerSecret) {
+      console.warn('Worker request rejected: Invalid or missing secret');
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    console.log('Worker invoked - checking queue...');
 
     // Dequeue next job
     const queueItem = await withTimeout(
@@ -48,6 +51,7 @@ async function runWorker(req: NextRequest): Promise<NextResponse> {
 
     if (!queueItem) {
       // No jobs in queue
+      console.log('Worker: No jobs in queue');
       return NextResponse.json({
         success: true,
         message: "No jobs in queue",
@@ -56,6 +60,7 @@ async function runWorker(req: NextRequest): Promise<NextResponse> {
     }
 
     const { jobId, url } = queueItem;
+    console.log(`Worker: Processing job ${jobId} for URL ${url}`);
 
     // Load job from Supabase to verify it exists and get current status
     const queryPromise = supabase
@@ -81,6 +86,7 @@ async function runWorker(req: NextRequest): Promise<NextResponse> {
 
     // Process if job is pending or running (multi-invoke pattern)
     if (job.status !== "pending" && job.status !== "running") {
+      console.log(`Worker: Job ${jobId} is already ${job.status}, skipping`);
       return NextResponse.json({
         success: true,
         message: `Job ${jobId} is already ${job.status}`,
@@ -89,6 +95,8 @@ async function runWorker(req: NextRequest): Promise<NextResponse> {
         status: job.status,
       });
     }
+
+    console.log(`Worker: Starting processing for job ${jobId}, current stage: ${job.stage || 0}`);
 
     // Determine starting stage based on current job state
     const currentStage = job.stage || 0;
@@ -126,16 +134,18 @@ async function runWorker(req: NextRequest): Promise<NextResponse> {
     // However, we wrap it in a timeout so the worker handler can still return within 15 seconds
     // The job processing itself can take up to 3 minutes, but we start it and let it run
     try {
-      // Start job processing - this will update status to "running" immediately
+      // Start job processing - processAuditJob will update status to "running" immediately
       // We use Promise.race to ensure it doesn't hang forever, but we actually await it
       // because in serverless, fire-and-forget doesn't work
       // Support multi-invoke pattern: resume from last completed stage
+      console.log(`Worker: Starting processAuditJob for ${jobId} from stage ${startFromStage}`);
       await Promise.race([
         processAuditJob(jobId, url, startFromStage, existingResults as any),
         new Promise<void>((_, reject) =>
           setTimeout(() => reject(new Error("Job processing timeout")), JOB_PROCESSING_TIMEOUT)
         )
       ]);
+      console.log(`Worker: Successfully completed processing job ${jobId}`);
       
       return NextResponse.json({
         success: true,

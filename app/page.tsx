@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -12,6 +12,18 @@ export default function Home() {
   const [urlInput, setUrlInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Handle browser back button for pricing tab
+  useEffect(() => {
+    const handlePopState = () => {
+      if (activeTab === "pricing") {
+        setActiveTab("home");
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [activeTab]);
 
   const handleUrlSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>) => {
     if (e) {
@@ -119,7 +131,7 @@ export default function Home() {
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
           {/* Logo */}
-          <div className="flex items-center gap-4">
+          <Link href="/" className="flex items-center gap-4 cursor-pointer">
             <span className="text-white text-6xl font-bold italic font-serif">TRI</span>
             <div className="relative w-64 h-64">
               {/* Three overlapping circles with outlined 2s - 4x size */}
@@ -161,7 +173,7 @@ export default function Home() {
               </div>
             </div>
             <span className="text-white text-6xl font-bold italic font-serif">TWO</span>
-          </div>
+          </Link>
 
           {/* Tab Navigation */}
           <nav className="flex items-center gap-4 md:gap-6">
@@ -314,54 +326,63 @@ export default function Home() {
               {/* Tier Cards Section */}
               <div className="grid md:grid-cols-3 gap-6">
                 {/* Base Plan */}
-                <div className="border-2 border-red-500 bg-zinc-900 rounded-lg p-8 flex flex-col">
+                <div className="bg-red-500 rounded-lg p-8 flex flex-col">
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$299</div>
                     <div className="text-xl font-semibold text-white mb-2">Base Tier</div>
-                    <div className="text-lg font-medium text-gray-300 mb-3">Essential SEO Health & Local Visibility Check</div>
-                    <p className="text-gray-400 text-sm leading-relaxed">
-                      Perfect for small service businesses that want fast clarity on where they stand.
+                    <div className="text-lg font-medium text-red-100 mb-3">Essential Monthly Local SEO Maintenance</div>
+                    <p className="text-red-100 text-sm leading-relaxed">
+                      Designed for contractors who need consistent visibility without heavy content or link work.
                     </p>
                   </div>
                   
                   <div className="mb-6">
-                    <div className="text-white font-semibold mb-3">What's Included</div>
+                    <div className="text-white font-semibold mb-3">Monthly Work Included</div>
                     <ul className="space-y-2">
                       <li className="flex items-start gap-2">
-                        <span className="text-red-500 mt-1">✓</span>
-                        <span className="text-gray-300 text-sm">Full website SEO health snapshot</span>
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Technical SEO health scan</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-red-500 mt-1">✓</span>
-                        <span className="text-gray-300 text-sm">Local discoverability scoring</span>
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Google Search Console review</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-red-500 mt-1">✓</span>
-                        <span className="text-gray-300 text-sm">Google indexing & crawlability check</span>
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Indexing & crawl error monitoring</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-red-500 mt-1">✓</span>
-                        <span className="text-gray-300 text-sm">Technical red-flag detection</span>
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Local keyword position tracking (core services only)</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-red-500 mt-1">✓</span>
-                        <span className="text-gray-300 text-sm">Keyword visibility baseline</span>
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">On-page optimization for 1 page/month</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-red-500 mt-1">✓</span>
-                        <span className="text-gray-300 text-sm">Clear priority action list</span>
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Title tag & meta description optimization</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Internal linking cleanup</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Google Business Profile optimization (if applicable)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Monthly SEO score update</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Monthly priority action list</span>
                       </li>
                     </ul>
                   </div>
 
-                  <div className="mb-6 flex-1">
-                    <div className="text-white font-semibold mb-2">Best For</div>
-                    <p className="text-gray-400 text-sm">
-                      Solo contractors, new businesses, or anyone who wants fast answers before investing further.
-                    </p>
-                  </div>
-
-                  <button className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors">
+                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-red-500 font-semibold rounded-lg transition-colors">
                     Get Started
                   </button>
                 </div>
@@ -371,9 +392,9 @@ export default function Home() {
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$499</div>
                     <div className="text-xl font-semibold text-white mb-2">Pro Tier</div>
-                    <div className="text-lg font-medium text-orange-100 mb-3">Deep SEO Performance & Growth Analysis</div>
+                    <div className="text-lg font-medium text-orange-100 mb-3">Growth-Focused SEO for Competitive Markets</div>
                     <p className="text-orange-100 text-sm leading-relaxed">
-                      Built for businesses ready to compete locally and regionally.
+                      For businesses actively trying to rank over competitors and expand service visibility.
                     </p>
                   </div>
                   
@@ -382,40 +403,49 @@ export default function Home() {
                     <ul className="space-y-2">
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Detailed on-page SEO breakdown</span>
+                        <span className="text-white text-sm">On-page optimization for 2–3 pages/month</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Local ranking factor analysis</span>
+                        <span className="text-white text-sm">Local landing page content optimization</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Competitor positioning overview</span>
+                        <span className="text-white text-sm">Conversion-focused SEO adjustments</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Content quality & relevance scoring</span>
+                        <span className="text-white text-sm">Image optimization & alt tagging</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Internal linking structure review</span>
+                        <span className="text-white text-sm">Structured data (basic schema)</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Lead-path & conversion flow review</span>
+                        <span className="text-white text-sm">Local competitor tracking</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Prioritized fix roadmap</span>
+                        <span className="text-white text-sm">Search intent alignment updates</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Monthly SEO opportunity mapping</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Expanded keyword tracking (by service + city)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Monthly performance breakdown report</span>
                       </li>
                     </ul>
                   </div>
 
                   <div className="mb-6 flex-1">
-                    <div className="text-white font-semibold mb-2">Best For</div>
-                    <p className="text-orange-100 text-sm">
-                      Growing contractors, multi-service companies, and competitive service markets.
-                    </p>
+                    <div className="text-white font-semibold mb-2">⏱️ Time Per Client</div>
                   </div>
 
                   <button className="w-full py-3 bg-white hover:bg-gray-100 text-orange-500 font-semibold rounded-lg transition-colors">
@@ -428,9 +458,9 @@ export default function Home() {
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$699</div>
                     <div className="text-xl font-semibold text-white mb-2">Enterprise Tier</div>
-                    <div className="text-lg font-medium text-teal-100 mb-3">High-Impact Regional SEO Strategy</div>
+                    <div className="text-lg font-medium text-teal-100 mb-3">Regional SEO + Multi-Location Dominance</div>
                     <p className="text-teal-100 text-sm leading-relaxed">
-                      For multi-location, multi-trade, or aggressive growth businesses.
+                      Built for companies expanding into multiple cities or running multiple service divisions.
                     </p>
                   </div>
                   
@@ -439,36 +469,49 @@ export default function Home() {
                     <ul className="space-y-2">
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Multi-region SEO scoring</span>
+                        <span className="text-white text-sm">Multi-location SEO tracking</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Advanced competitor gap analysis</span>
+                        <span className="text-white text-sm">Regional keyword heat-mapping</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Conversion optimization review</span>
+                        <span className="text-white text-sm">On-page optimization for 4–5 pages/month</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">SEO revenue opportunity mapping</span>
+                        <span className="text-white text-sm">Advanced internal linking architecture</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Page-by-page priority roadmap</span>
+                        <span className="text-white text-sm">High-intent service page engineering</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-white mt-1">✓</span>
-                        <span className="text-white text-sm">Custom regional strategy recommendations</span>
+                        <span className="text-white text-sm">Conversion rate optimization (light CRO)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Local backlink opportunity targeting</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Market gap analysis</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Cross-city ranking strategy</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">Advanced technical audits</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-white mt-1">✓</span>
+                        <span className="text-white text-sm">SEO revenue projection insights</span>
                       </li>
                     </ul>
-                  </div>
-
-                  <div className="mb-6 flex-1">
-                    <div className="text-white font-semibold mb-2">Best For</div>
-                    <p className="text-teal-100 text-sm">
-                      Expansion-focused companies, franchises, and regional service brands.
-                    </p>
                   </div>
 
                   <button className="w-full py-3 bg-white hover:bg-gray-100 text-teal-500 font-semibold rounded-lg transition-colors">
@@ -484,129 +527,144 @@ export default function Home() {
                   <table className="w-full border-collapse">
                     <thead>
                       <tr>
-                        <th className="bg-zinc-800 text-left p-4 text-white font-semibold sticky left-0 z-10">Feature</th>
-                        <th className="bg-zinc-800 text-center p-4 text-white font-semibold min-w-[180px]">Base<br />$299 monthly</th>
-                        <th className="bg-zinc-800 text-center p-4 text-white font-semibold min-w-[180px]">Pro<br />$499 monthly</th>
-                        <th className="bg-zinc-800 text-center p-4 text-white font-semibold min-w-[180px]">Enterprise<br />$699 monthly</th>
+                        <th className="bg-purple-600 text-left p-4 text-white font-semibold sticky left-0 z-10">Feature</th>
+                        <th className="bg-purple-600 text-center p-4 text-white font-semibold min-w-[180px]">Base<br />$299</th>
+                        <th className="bg-purple-600 text-center p-4 text-white font-semibold min-w-[180px]">Pro<br />$499</th>
+                        <th className="bg-purple-600 text-center p-4 text-white font-semibold min-w-[180px]">Enterprise<br />$699</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {/* Base Tier Features */}
                       <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Full website SEO health snapshot</td>
-                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">SEO Health Monitoring</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Local discoverability scoring</td>
-                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Google Indexing & Crawl Checks</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Google indexing & crawlability check</td>
-                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Monthly SEO Score</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Technical red-flag detection</td>
-                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Keyword Rank Tracking</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Core</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Expanded</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Regional</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Keyword visibility baseline</td>
-                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Google Business Profile Optimization</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Clear priority action list</td>
-                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">On-Page SEO Optimization</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ 1 Page</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ 2–3 Pages</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ 4–5 Pages</span></td>
                       </tr>
-                      {/* Pro Tier Additional Features */}
                       <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Detailed on-page SEO breakdown</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Title & Meta Optimization</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Local ranking factor analysis</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Internal Linking Optimization</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Competitor positioning overview</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Image Alt & Media SEO</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Content quality & relevance scoring</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Conversion Path Optimization</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Internal linking structure review</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Local Landing Page Optimization</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Lead-path & conversion flow review</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Structured Data (Schema)</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Basic</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Advanced</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Prioritized fix roadmap</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-orange-500 text-2xl">✓</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
-                      </tr>
-                      {/* Enterprise Tier Additional Features */}
-                      <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Multi-region SEO scoring</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
-                      </tr>
-                      <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Advanced competitor gap analysis</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Competitor Tracking</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Conversion optimization review</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">SEO Opportunity Forecasting</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">SEO revenue opportunity mapping</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Multi-Location SEO</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Page-by-page priority roadmap</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Regional Keyword Heatmaps</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Custom regional strategy recommendations</td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-gray-500 text-xl">○</span></td>
-                        <td className="p-4 text-center"><span className="text-teal-500 text-2xl">✓</span></td>
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Backlink Opportunity Mapping</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                      </tr>
+                      <tr className="bg-zinc-800">
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Advanced Technical Audits</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                      </tr>
+                      <tr className="bg-zinc-900">
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">SEO Revenue Projection</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                      </tr>
+                      <tr className="bg-zinc-800">
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Monthly Action Plan</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                      </tr>
+                      <tr className="bg-zinc-900">
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Monthly Performance Report</td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Advanced</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Executive</span></td>
+                      </tr>
+                      <tr className="bg-zinc-800">
+                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">AI SEO Analyst (Insight Engine)</td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                     </tbody>
                     <tfoot>

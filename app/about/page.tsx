@@ -1,9 +1,26 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function AboutPage() {
+  const router = useRouter();
+
+  // Handle browser back button
+  useEffect(() => {
+    const handlePopState = () => {
+      // If there's history, let browser handle it naturally
+      // Otherwise navigate to home
+      if (window.history.length <= 1) {
+        router.push("/");
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [router]);
+
   return (
     <div className="min-h-screen bg-zinc-900 text-white relative overflow-hidden">
       {/* Geometric pattern background */}

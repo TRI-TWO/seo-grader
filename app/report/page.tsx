@@ -87,9 +87,15 @@ function ReportPageContent() {
     loadStates();
 
     // Load results from localStorage
-    if (typeof window !== 'undefined') {
-      const resultsJson = localStorage.getItem('auditResults');
-      console.log("Loading from localStorage:", { hasResults: !!resultsJson });
+    // Use a small delay to ensure localStorage is available after navigation
+    const loadResults = () => {
+      if (typeof window !== 'undefined') {
+        const resultsJson = localStorage.getItem('auditResults');
+        console.log("Loading from localStorage:", { 
+          hasResults: !!resultsJson,
+          length: resultsJson?.length || 0,
+          allKeys: Object.keys(localStorage)
+        });
       
       if (resultsJson) {
         try {
@@ -101,10 +107,11 @@ function ReportPageContent() {
             hasAiScore: !!results.aiScoreRaw,
             partialAudit: results.partialAudit,
             url: results.url,
+            keys: Object.keys(results),
           });
           
-          // Clear localStorage after reading
-          localStorage.removeItem('auditResults');
+          // Only clear localStorage after successful processing
+          // Don't clear it yet - wait until we've set all state
           
           // Process results
           setFinalUrl(results.finalUrl || results.url || "");
@@ -170,18 +177,27 @@ function ReportPageContent() {
             setAiMetrics(results.aiMetrics);
           }
 
+          // Clear localStorage after successful processing
+          localStorage.removeItem('auditResults');
           setLoading(false);
         } catch (err) {
-          console.error("Error parsing results from sessionStorage:", err);
-          setError("Failed to load audit results");
+          console.error("Error parsing results from localStorage:", err, resultsJson);
+          setError("Failed to load audit results. Please try submitting again.");
           setLoading(false);
+          // Don't clear localStorage on error - let user retry
         }
       } else {
-        // No results found in sessionStorage
+        // No results found in localStorage
+        console.warn("No audit results found in localStorage");
         setError("No audit results found. Please submit a URL from the homepage.");
         setLoading(false);
       }
-    }
+      }
+    };
+    
+    // Small delay to ensure localStorage is available after navigation
+    const timer = setTimeout(loadResults, 50);
+    return () => clearTimeout(timer);
   }, []);
 
   const parseHTML = (html: string, apiData: any): Omit<AuditData, "seoScore" | "titleScoreRaw" | "titleScore10" | "titleStatus" | "mediaScoreRaw" | "mediaScore10" | "mediaStatus" | "aiScoreRaw" | "aiScore10" | "aiStatus"> => {
@@ -1270,7 +1286,7 @@ function ReportPageContent() {
               {/* Enterprise Plan */}
               <div className="bg-teal-500 rounded-lg p-6 flex items-center justify-between">
                 <div>
-                  <div className="text-xl font-bold">$899 Ent</div>
+                  <div className="text-xl font-bold">$699 Ent</div>
                   <div className="text-teal-100 text-xs">Custom</div>
                 </div>
                 <div className="w-8 h-8 text-white">

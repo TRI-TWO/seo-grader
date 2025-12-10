@@ -1,10 +1,4 @@
 {
-  "framework": "nextjs",
-  "crons": [
-    {
-      "path": "/api/worker/process",
-      "schedule": "0 * * * *"
-    }
-  ]
+  "framework": "nextjs"
 }
 

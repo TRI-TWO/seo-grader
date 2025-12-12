@@ -141,124 +141,11 @@ export default function Home() {
 
       <div className="relative z-10">
         {/* Header */}
-        <header className="px-6 py-4 md:px-12 md:py-6">
-          <div className="flex items-start">
+        <header className="px-6 py-2 md:px-12 md:py-3">
+          <div className="flex items-start justify-between">
             {/* Logo - Fully left justified */}
             <div className="flex-shrink-0">
               <Logo />
-            </div>
-            
-            {/* Content block - Centered, 5px below logo */}
-            <div className="flex-1 flex justify-center">
-              <div className="mt-[5px] flex flex-col gap-4 items-center">
-                {/* Main Heading */}
-                <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-center">
-                  EMPOWER YOUR SEO
-                </h1>
-
-                {/* Subheading */}
-                <p className="text-xl md:text-2xl text-gray-300 text-center">
-                  CLARITY. CONFIDENCE. CONTROL.
-                </p>
-
-                {/* URL Input Section */}
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleUrlSubmit(e);
-                }} className="flex flex-col sm:flex-row gap-4 max-w-2xl w-full" noValidate>
-                  <input
-                    type="text"
-                    placeholder="Enter your URL here..."
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleUrlSubmit(e);
-                      }
-                    }}
-                    disabled={loading}
-                    className="flex-1 px-6 py-4 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ '--tw-ring-color': '#16b8a6' } as React.CSSProperties}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleUrlSubmit}
-                    disabled={loading}
-                    className="px-8 py-4 bg-[#8B4513] hover:bg-[#A0522D] text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? "Processing..." : "Free"}
-                  </button>
-                </form>
-                
-                {/* Loading State */}
-                {loading && (
-                  <div className="mt-4 text-center">
-                    <div className="text-xl text-gray-300 mb-4">Running SEO audit...</div>
-                    <div className="flex justify-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: '#16b8a6' }}></div>
-                    </div>
-                    <div className="text-gray-400 text-sm mt-4">This may take up to 25 seconds</div>
-                  </div>
-                )}
-                
-                {/* Error State */}
-                {error && !loading && (
-                  <div className="mt-4 max-w-2xl w-full">
-                    <div className="bg-red-600 border border-red-700 rounded-lg px-6 py-4">
-                      <div className="text-white font-semibold mb-2">Error</div>
-                      <div className="text-red-100">{error}</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Pricing / Tier Section */}
-                <div className="mt-4 w-full max-w-6xl">
-                  <div className="flex flex-col md:flex-row gap-4">
-                    {/* Left Card - Red */}
-                    <div className="flex-1 bg-red-500 rounded-lg p-6 flex items-center justify-between">
-                      <div>
-                        <div className="text-2xl font-bold">$299 Base</div>
-                        <div className="text-red-100 text-sm">$299 Check</div>
-                      </div>
-                      <div className="w-10 h-10 text-white">
-                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
-                          <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29l1.5-1.5C4.17 14.3 4 13.18 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8c0 1.18-.17 2.3-.47 3.29l1.5 1.5C21.64 14.98 22 13.54 22 12c0-5.52-4.48-10-10-10zm0 18c-1.38 0-2.63-.56-3.54-1.46L12 17l3.54 1.54C14.63 19.44 13.38 20 12 20z"/>
-                          <circle cx="9" cy="12" r="1.5"/>
-                          <circle cx="15" cy="12" r="1.5"/>
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Middle Card - Orange */}
-                    <div className="flex-1 bg-orange-500 rounded-lg p-6 flex items-center justify-between">
-                      <div>
-                        <div className="text-2xl font-bold">$499 Pro Tier</div>
-                        <div className="text-orange-100 text-sm">Deep Analysis</div>
-                      </div>
-                    </div>
-
-                    {/* Right Card - Green */}
-                    <div className="flex-1 rounded-lg p-6 flex items-center justify-between" style={{ backgroundColor: '#16b8a6' }}>
-                      <div>
-                        <div className="text-2xl font-bold">$699 Enterprise</div>
-                        <div className="text-sm" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Custom Solutions</div>
-                      </div>
-                      <div className="w-10 h-10 text-white">
-                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
-                          <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
-                          <rect x="6" y="8" width="2" height="2" fill="currentColor"/>
-                          <rect x="6" y="11" width="2" height="2" fill="currentColor"/>
-                          <rect x="6" y="14" width="2" height="2" fill="currentColor"/>
-                          <rect x="16" y="8" width="2" height="2" fill="currentColor"/>
-                          <rect x="16" y="11" width="2" height="2" fill="currentColor"/>
-                          <rect x="16" y="14" width="2" height="2" fill="currentColor"/>
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Hamburger Menu - Right justified */}
@@ -267,6 +154,119 @@ export default function Home() {
             </div>
           </div>
         </header>
+
+        {/* Content block - Centered, 5px below header */}
+        <div className="mt-[5px] flex justify-center">
+          <div className="flex flex-col gap-4 items-center">
+            {/* Main Heading */}
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-center">
+              EMPOWER YOUR SEO
+            </h1>
+
+            {/* Subheading */}
+            <p className="text-xl md:text-2xl text-gray-300 text-center">
+              CLARITY. CONFIDENCE. CONTROL.
+            </p>
+
+            {/* URL Input Section */}
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleUrlSubmit(e);
+            }} className="flex flex-col sm:flex-row gap-4 max-w-2xl w-full" noValidate>
+              <input
+                type="text"
+                placeholder="Enter your URL here..."
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleUrlSubmit(e);
+                  }
+                }}
+                disabled={loading}
+                className="flex-1 px-6 py-4 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ '--tw-ring-color': '#16b8a6' } as React.CSSProperties}
+              />
+              <button
+                type="button"
+                onClick={handleUrlSubmit}
+                disabled={loading}
+                className="px-8 py-4 bg-[#8B4513] hover:bg-[#A0522D] text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Processing..." : "Free"}
+              </button>
+            </form>
+            
+            {/* Loading State */}
+            {loading && (
+              <div className="mt-4 text-center">
+                <div className="text-xl text-gray-300 mb-4">Running SEO audit...</div>
+                <div className="flex justify-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: '#16b8a6' }}></div>
+                </div>
+                <div className="text-gray-400 text-sm mt-4">This may take up to 25 seconds</div>
+              </div>
+            )}
+            
+            {/* Error State */}
+            {error && !loading && (
+              <div className="mt-4 max-w-2xl w-full">
+                <div className="bg-red-600 border border-red-700 rounded-lg px-6 py-4">
+                  <div className="text-white font-semibold mb-2">Error</div>
+                  <div className="text-red-100">{error}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Pricing / Tier Section */}
+            <div className="mt-4 w-full max-w-6xl">
+              <div className="flex flex-col md:flex-row gap-4">
+                {/* Left Card - Red */}
+                <div className="flex-1 bg-red-500 rounded-lg p-6 flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-bold">$299 Base</div>
+                    <div className="text-red-100 text-sm">$299 Check</div>
+                  </div>
+                  <div className="w-10 h-10 text-white">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+                      <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29l1.5-1.5C4.17 14.3 4 13.18 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8c0 1.18-.17 2.3-.47 3.29l1.5 1.5C21.64 14.98 22 13.54 22 12c0-5.52-4.48-10-10-10zm0 18c-1.38 0-2.63-.56-3.54-1.46L12 17l3.54 1.54C14.63 19.44 13.38 20 12 20z"/>
+                      <circle cx="9" cy="12" r="1.5"/>
+                      <circle cx="15" cy="12" r="1.5"/>
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Middle Card - Orange */}
+                <div className="flex-1 bg-orange-500 rounded-lg p-6 flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-bold">$499 Pro Tier</div>
+                    <div className="text-orange-100 text-sm">Deep Analysis</div>
+                  </div>
+                </div>
+
+                {/* Right Card - Green */}
+                <div className="flex-1 rounded-lg p-6 flex items-center justify-between" style={{ backgroundColor: '#16b8a6' }}>
+                  <div>
+                    <div className="text-2xl font-bold">$699 Enterprise</div>
+                    <div className="text-sm" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Custom Solutions</div>
+                  </div>
+                  <div className="w-10 h-10 text-white">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+                      <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+                      <rect x="6" y="8" width="2" height="2" fill="currentColor"/>
+                      <rect x="6" y="11" width="2" height="2" fill="currentColor"/>
+                      <rect x="6" y="14" width="2" height="2" fill="currentColor"/>
+                      <rect x="16" y="8" width="2" height="2" fill="currentColor"/>
+                      <rect x="16" y="11" width="2" height="2" fill="currentColor"/>
+                      <rect x="16" y="14" width="2" height="2" fill="currentColor"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Main Content - Tab-based */}
         <main className="min-h-[calc(100vh-200px)] px-6 py-12">

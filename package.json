@@ -9,9 +9,16 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@prisma/client": "^5.16.1",
+    "@sendgrid/mail": "^8.1.6",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.87.1",
+    "@types/bcryptjs": "^2.4.6",
     "@types/jsdom": "^21.1.6",
+    "bcryptjs": "^3.0.3",
     "jsdom": "^24.0.0",
     "next": "^14.0.0",
+    "prisma": "^5.16.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

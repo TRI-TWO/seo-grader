@@ -3,6 +3,8 @@
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Logo from "@/components/Logo";
+import HamburgerMenu from "@/components/HamburgerMenu";
 
 export default function AboutPage() {
   const router = useRouter();
@@ -33,77 +35,15 @@ export default function AboutPage() {
       <div className="relative z-10">
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-4">
-            <span className="text-white text-6xl font-bold italic font-serif">TRI</span>
-            <div className="relative w-64 h-64">
-              {/* Three overlapping circles with outlined 2s - 4x size */}
-              {/* Top-left circle (deep red/clay) - orange "2" */}
-              <div className="absolute top-0 -left-[5px] w-40 h-40 bg-[#8B3A2E] rounded-full flex items-center justify-center z-20 shadow-lg">
-                <span 
-                  className="font-bold text-[5.625rem] leading-none"
-                  style={{ 
-                    WebkitTextStroke: '6px #D17130',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                    fontFamily: 'sans-serif'
-                  } as React.CSSProperties}
-                >2</span>
-              </div>
-              {/* Top-right circle (burnt orange) - green/teal "2" */}
-              <div className="absolute top-0 -right-[5px] w-40 h-40 bg-[#D17130] rounded-full flex items-center justify-center z-20 shadow-lg">
-                <span 
-                  className="font-bold text-[5.625rem] leading-none"
-                  style={{ 
-                    WebkitTextStroke: '6px #546D75',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                    fontFamily: 'sans-serif'
-                  } as React.CSSProperties}
-                >2</span>
-              </div>
-              {/* Bottom-center circle (slate blue-grey) - red "2" */}
-              <div className="absolute -bottom-[10px] left-1/2 transform -translate-x-1/2 w-40 h-40 bg-[#546D75] rounded-full flex items-center justify-center z-10 shadow-lg">
-                <span 
-                  className="font-bold text-[5.625rem] leading-none"
-                  style={{ 
-                    WebkitTextStroke: '6px #8B3A2E',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                    fontFamily: 'sans-serif'
-                  } as React.CSSProperties}
-                >2</span>
-              </div>
-            </div>
-            <span className="text-white text-6xl font-bold italic font-serif">TWO</span>
-          </Link>
+          {/* Logo - Fully left justified */}
+          <div className="flex-shrink-0">
+            <Logo />
+          </div>
 
-          {/* Tab Navigation */}
-          <nav className="flex items-center gap-4 md:gap-6">
-            <Link
-              href="/"
-              className="px-4 py-2 text-5xl font-medium transition text-gray-400 hover:text-gray-300"
-            >
-              Home
-            </Link>
-            <Link
-              href="/"
-              onClick={(e) => {
-                e.preventDefault();
-                // Scroll to pricing section or handle pricing navigation
-                window.location.href = '/#pricing';
-              }}
-              className="px-4 py-2 text-5xl font-medium transition text-gray-400 hover:text-gray-300"
-            >
-              Pricing
-            </Link>
-            <Link
-              href="/about"
-              className="px-4 py-2 text-5xl font-medium transition text-white border-b-2 border-teal-500"
-            >
-              About
-            </Link>
-          </nav>
+          {/* Hamburger Menu - Right justified */}
+          <div className="flex-shrink-0">
+            <HamburgerMenu />
+          </div>
         </header>
 
         {/* Main Content */}

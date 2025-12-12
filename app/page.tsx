@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Logo from "@/components/Logo";
+import HamburgerMenu from "@/components/HamburgerMenu";
 
 type TabType = "home" | "pricing" | "about";
 
@@ -24,6 +26,16 @@ export default function Home() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [activeTab]);
+
+  // Handle pricing navigation from hamburger menu
+  useEffect(() => {
+    const handleNavigateToPricing = () => {
+      setActiveTab("pricing");
+    };
+
+    window.addEventListener('navigateToPricing', handleNavigateToPricing);
+    return () => window.removeEventListener('navigateToPricing', handleNavigateToPricing);
+  }, []);
 
   const handleUrlSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>) => {
     if (e) {
@@ -129,95 +141,23 @@ export default function Home() {
 
       <div className="relative z-10">
         {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-4 cursor-pointer">
-            <span className="text-white text-6xl font-bold italic font-serif">TRI</span>
-            <div className="relative w-64 h-64">
-              {/* Three overlapping circles with outlined 2s - 4x size */}
-              {/* Top-left circle (deep red/clay) - orange "2" */}
-              <div className="absolute top-0 -left-[5px] w-40 h-40 bg-[#8B3A2E] rounded-full flex items-center justify-center z-20 shadow-lg">
-                <span 
-                  className="font-bold text-[5.625rem] leading-none"
-                  style={{ 
-                    WebkitTextStroke: '6px #D17130',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                    fontFamily: 'sans-serif'
-                  } as React.CSSProperties}
-                >2</span>
-              </div>
-              {/* Top-right circle (burnt orange) - green/teal "2" */}
-              <div className="absolute top-0 -right-[5px] w-40 h-40 bg-[#D17130] rounded-full flex items-center justify-center z-20 shadow-lg">
-                <span 
-                  className="font-bold text-[5.625rem] leading-none"
-                  style={{ 
-                    WebkitTextStroke: '6px #546D75',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                    fontFamily: 'sans-serif'
-                  } as React.CSSProperties}
-                >2</span>
-              </div>
-              {/* Bottom-center circle (slate blue-grey) - red "2" */}
-              <div className="absolute -bottom-[10px] left-1/2 transform -translate-x-1/2 w-40 h-40 bg-[#546D75] rounded-full flex items-center justify-center z-10 shadow-lg">
-                <span 
-                  className="font-bold text-[5.625rem] leading-none"
-                  style={{ 
-                    WebkitTextStroke: '6px #8B3A2E',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                    fontFamily: 'sans-serif'
-                  } as React.CSSProperties}
-                >2</span>
-              </div>
+        <header className="px-6 py-4 md:px-12 md:py-6">
+          <div className="flex items-start">
+            {/* Logo - Fully left justified */}
+            <div className="flex-shrink-0">
+              <Logo />
             </div>
-            <span className="text-white text-6xl font-bold italic font-serif">TWO</span>
-          </Link>
-
-          {/* Tab Navigation */}
-          <nav className="flex items-center gap-4 md:gap-6">
-            <button
-              onClick={() => setActiveTab("home")}
-              className={`px-4 py-2 text-5xl font-medium transition ${
-                activeTab === "home"
-                  ? "text-white border-b-2 border-teal-500"
-                  : "text-gray-400 hover:text-gray-300"
-              }`}
-            >
-              Home
-            </button>
-            <button
-              onClick={() => setActiveTab("pricing")}
-              className={`px-4 py-2 text-5xl font-medium transition ${
-                activeTab === "pricing"
-                  ? "text-white border-b-2 border-teal-500"
-                  : "text-gray-400 hover:text-gray-300"
-              }`}
-            >
-              Pricing
-            </button>
-            <Link
-              href="/about"
-              className="px-4 py-2 text-5xl font-medium transition text-gray-400 hover:text-gray-300"
-            >
-              About
-            </Link>
-          </nav>
-        </header>
-
-        {/* Main Content - Tab-based */}
-        <main className="min-h-[calc(100vh-200px)] px-6 py-12">
-          {activeTab === "home" && (
-            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-300px)]">
-              <div className="text-center space-y-6 max-w-4xl">
+            
+            {/* Content block - Centered, 5px below logo */}
+            <div className="flex-1 flex justify-center">
+              <div className="mt-[5px] flex flex-col gap-4 items-center">
                 {/* Main Heading */}
-                <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
+                <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-center">
                   EMPOWER YOUR SEO
                 </h1>
 
                 {/* Subheading */}
-                <p className="text-xl md:text-2xl text-gray-300">
+                <p className="text-xl md:text-2xl text-gray-300 text-center">
                   CLARITY. CONFIDENCE. CONTROL.
                 </p>
 
@@ -226,7 +166,7 @@ export default function Home() {
                   e.preventDefault();
                   e.stopPropagation();
                   handleUrlSubmit(e);
-                }} className="flex flex-col sm:flex-row gap-4 mt-12 max-w-2xl mx-auto" noValidate>
+                }} className="flex flex-col sm:flex-row gap-4 max-w-2xl w-full" noValidate>
                   <input
                     type="text"
                     placeholder="Enter your URL here..."
@@ -238,7 +178,8 @@ export default function Home() {
                       }
                     }}
                     disabled={loading}
-                    className="flex-1 px-6 py-4 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 px-6 py-4 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ '--tw-ring-color': '#16b8a6' } as React.CSSProperties}
                   />
                   <button
                     type="button"
@@ -252,10 +193,10 @@ export default function Home() {
                 
                 {/* Loading State */}
                 {loading && (
-                  <div className="mt-8 text-center">
+                  <div className="mt-4 text-center">
                     <div className="text-xl text-gray-300 mb-4">Running SEO audit...</div>
                     <div className="flex justify-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: '#16b8a6' }}></div>
                     </div>
                     <div className="text-gray-400 text-sm mt-4">This may take up to 25 seconds</div>
                   </div>
@@ -263,61 +204,75 @@ export default function Home() {
                 
                 {/* Error State */}
                 {error && !loading && (
-                  <div className="mt-8 max-w-2xl mx-auto">
+                  <div className="mt-4 max-w-2xl w-full">
                     <div className="bg-red-600 border border-red-700 rounded-lg px-6 py-4">
                       <div className="text-white font-semibold mb-2">Error</div>
                       <div className="text-red-100">{error}</div>
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Pricing / Tier Section */}
-              <div className="mt-16 w-full max-w-6xl mx-auto">
-                <div className="flex flex-col md:flex-row gap-4">
-                  {/* Left Card - Red */}
-                  <div className="flex-1 bg-red-500 rounded-lg p-6 flex items-center justify-between">
-                    <div>
-                      <div className="text-2xl font-bold">$299 Base</div>
-                      <div className="text-red-100 text-sm">$299 Check</div>
+                {/* Pricing / Tier Section */}
+                <div className="mt-4 w-full max-w-6xl">
+                  <div className="flex flex-col md:flex-row gap-4">
+                    {/* Left Card - Red */}
+                    <div className="flex-1 bg-red-500 rounded-lg p-6 flex items-center justify-between">
+                      <div>
+                        <div className="text-2xl font-bold">$299 Base</div>
+                        <div className="text-red-100 text-sm">$299 Check</div>
+                      </div>
+                      <div className="w-10 h-10 text-white">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+                          <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29l1.5-1.5C4.17 14.3 4 13.18 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8c0 1.18-.17 2.3-.47 3.29l1.5 1.5C21.64 14.98 22 13.54 22 12c0-5.52-4.48-10-10-10zm0 18c-1.38 0-2.63-.56-3.54-1.46L12 17l3.54 1.54C14.63 19.44 13.38 20 12 20z"/>
+                          <circle cx="9" cy="12" r="1.5"/>
+                          <circle cx="15" cy="12" r="1.5"/>
+                        </svg>
+                      </div>
                     </div>
-                    <div className="w-10 h-10 text-white">
-                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
-                        <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29l1.5-1.5C4.17 14.3 4 13.18 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8c0 1.18-.17 2.3-.47 3.29l1.5 1.5C21.64 14.98 22 13.54 22 12c0-5.52-4.48-10-10-10zm0 18c-1.38 0-2.63-.56-3.54-1.46L12 17l3.54 1.54C14.63 19.44 13.38 20 12 20z"/>
-                        <circle cx="9" cy="12" r="1.5"/>
-                        <circle cx="15" cy="12" r="1.5"/>
-                      </svg>
-                    </div>
-                  </div>
 
-                  {/* Middle Card - Orange */}
-                  <div className="flex-1 bg-orange-500 rounded-lg p-6 flex items-center justify-between">
-                    <div>
-                      <div className="text-2xl font-bold">$499 Pro Tier</div>
-                      <div className="text-orange-100 text-sm">Deep Analysis</div>
+                    {/* Middle Card - Orange */}
+                    <div className="flex-1 bg-orange-500 rounded-lg p-6 flex items-center justify-between">
+                      <div>
+                        <div className="text-2xl font-bold">$499 Pro Tier</div>
+                        <div className="text-orange-100 text-sm">Deep Analysis</div>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Right Card - Teal */}
-                  <div className="flex-1 bg-teal-500 rounded-lg p-6 flex items-center justify-between">
-                    <div>
-                      <div className="text-2xl font-bold">$699 Enterprise</div>
-                      <div className="text-teal-100 text-sm">Custom Solutions</div>
-                    </div>
-                    <div className="w-10 h-10 text-white">
-                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
-                        <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
-                        <rect x="6" y="8" width="2" height="2" fill="currentColor"/>
-                        <rect x="6" y="11" width="2" height="2" fill="currentColor"/>
-                        <rect x="6" y="14" width="2" height="2" fill="currentColor"/>
-                        <rect x="16" y="8" width="2" height="2" fill="currentColor"/>
-                        <rect x="16" y="11" width="2" height="2" fill="currentColor"/>
-                        <rect x="16" y="14" width="2" height="2" fill="currentColor"/>
-                      </svg>
+                    {/* Right Card - Green */}
+                    <div className="flex-1 rounded-lg p-6 flex items-center justify-between" style={{ backgroundColor: '#16b8a6' }}>
+                      <div>
+                        <div className="text-2xl font-bold">$699 Enterprise</div>
+                        <div className="text-sm" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Custom Solutions</div>
+                      </div>
+                      <div className="w-10 h-10 text-white">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+                          <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+                          <rect x="6" y="8" width="2" height="2" fill="currentColor"/>
+                          <rect x="6" y="11" width="2" height="2" fill="currentColor"/>
+                          <rect x="6" y="14" width="2" height="2" fill="currentColor"/>
+                          <rect x="16" y="8" width="2" height="2" fill="currentColor"/>
+                          <rect x="16" y="11" width="2" height="2" fill="currentColor"/>
+                          <rect x="16" y="14" width="2" height="2" fill="currentColor"/>
+                        </svg>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Hamburger Menu - Right justified */}
+            <div className="flex-shrink-0">
+              <HamburgerMenu />
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content - Tab-based */}
+        <main className="min-h-[calc(100vh-200px)] px-6 py-12">
+          {activeTab === "home" && (
+            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-300px)]">
+              {/* Home tab content is now in header */}
             </div>
           )}
 
@@ -444,22 +399,18 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  <div className="mb-6 flex-1">
-                    <div className="text-white font-semibold mb-2">⏱️ Time Per Client</div>
-                  </div>
-
                   <button className="w-full py-3 bg-white hover:bg-gray-100 text-orange-500 font-semibold rounded-lg transition-colors">
                     Get Started
                   </button>
                 </div>
 
                 {/* Enterprise Plan */}
-                <div className="bg-teal-500 rounded-lg p-8 flex flex-col">
+                <div className="rounded-lg p-8 flex flex-col" style={{ backgroundColor: '#16b8a6' }}>
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$699</div>
                     <div className="text-xl font-semibold text-white mb-2">Enterprise Tier</div>
-                    <div className="text-lg font-medium text-teal-100 mb-3">Regional SEO + Multi-Location Dominance</div>
-                    <p className="text-teal-100 text-sm leading-relaxed">
+                    <div className="text-lg font-medium mb-3" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Regional SEO + Multi-Location Dominance</div>
+                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
                       Built for companies expanding into multiple cities or running multiple service divisions.
                     </p>
                   </div>
@@ -514,7 +465,7 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-teal-500 font-semibold rounded-lg transition-colors">
+                  <button className="w-full py-3 bg-white hover:bg-gray-100 font-semibold rounded-lg transition-colors" style={{ color: '#16b8a6' }}>
                     Contact Sales
                   </button>
                 </div>
@@ -554,9 +505,9 @@ export default function Home() {
                       </tr>
                       <tr className="bg-zinc-800">
                         <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Keyword Rank Tracking</td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Core</span></td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Expanded</span></td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Regional</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
                         <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Google Business Profile Optimization</td>
@@ -566,9 +517,9 @@ export default function Home() {
                       </tr>
                       <tr className="bg-zinc-800">
                         <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">On-Page SEO Optimization</td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ 1 Page</span></td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ 2–3 Pages</span></td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ 4–5 Pages</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
                         <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Title & Meta Optimization</td>
@@ -603,8 +554,8 @@ export default function Home() {
                       <tr className="bg-zinc-800">
                         <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Structured Data (Schema)</td>
                         <td className="p-4 text-center"><span className="text-red-500 text-2xl">❌</span></td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Basic</span></td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Advanced</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-900">
                         <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Competitor Tracking</td>
@@ -657,8 +608,8 @@ export default function Home() {
                       <tr className="bg-zinc-900">
                         <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">Monthly Performance Report</td>
                         <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Advanced</span></td>
-                        <td className="p-4 text-center"><span className="text-green-500 text-sm">✅ Executive</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
+                        <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
                       <tr className="bg-zinc-800">
                         <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">AI SEO Analyst (Insight Engine)</td>
@@ -681,7 +632,7 @@ export default function Home() {
                           </button>
                         </td>
                         <td className="p-4 text-center">
-                          <button className="w-full py-3 bg-teal-500 hover:bg-teal-600 text-white font-semibold rounded-lg transition-colors">
+                          <button className="w-full py-3 text-white font-semibold rounded-lg transition-colors" style={{ backgroundColor: '#16b8a6' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#14a895'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16b8a6'}>
                             Contact Sales
                           </button>
                         </td>

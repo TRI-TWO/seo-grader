@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String                @id // Supabase auth.users.id (UUID)
+  email         String                @unique
+  role          UserRole              @default(VISITOR)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  audits        AuditResult[]
+  appointments  CalendlyAppointment[]
+  subscriptions UserSubscription[]
+}
+
+enum UserRole {
+  ADMIN
+  VISITOR
+}
+
+model AuditResult {
+  id                        String                @id @default(cuid())
+  url                       String
+  userEmail                 String
+  user                      User?                 @relation(fields: [userEmail], references: [email])
+  isPaid                    Boolean               @default(false)
+  hasAppointment            Boolean               @default(false)
+  rawSeoJson                Json
+  llmSummary                String?
+  contentGrade              String?
+  competitorJson            Json?
+  articleIdeas              Json?
+  companyName               String?
+  titleSearchRelevanceScore Int?
+  technicalFoundationsScore Int?
+  aiOptimizationScore       Int?
+  contentSemanticsScore     Int?
+  mediaOptimizationScore    Int?
+  crawlabilityIndexScore    Int?
+  createdAt                 DateTime              @default(now())
+  appointments              CalendlyAppointment[]
+}
+
+model CalendlyAppointment {
+  id              String       @id @default(cuid())
+  calendlyEventId String       @unique
+  url             String
+  userEmail       String
+  user            User?        @relation(fields: [userEmail], references: [email])
+  scheduledAt     DateTime
+  status          String
+  auditId         String?
+  audit           AuditResult? @relation(fields: [auditId], references: [id])
+  createdAt       DateTime     @default(now())
+}
+
+model SubscriptionPlan {
+  id            String             @id @default(cuid())
+  name          String
+  squarePlanId  String
+  priceCents    Int
+  subscriptions UserSubscription[]
+}
+
+model UserSubscription {
+  id                 String           @id @default(cuid())
+  userId             String
+  user               User             @relation(fields: [userId], references: [id])
+  subscriptionPlanId String
+  subscriptionPlan   SubscriptionPlan @relation(fields: [subscriptionPlanId], references: [id])
+  status             String
+  startedAt          DateTime         @default(now())
+  canceledAt         DateTime?
+}
+
+model AuditJob {
+  id           String   @id @default(uuid())
+  url          String
+  status       String // "pending" | "running" | "done" | "error"
+  stage        Int      @default(0) // 0, 1, 2, 3
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  errorMessage String?
+  results      Json? // Full audit result object
+
+  @@index([url, status, createdAt])
+  @@index([status])
+}
+
+// Auth models removed - using Supabase Auth instead
+// Account, Session, and VerificationToken are managed by Supabase

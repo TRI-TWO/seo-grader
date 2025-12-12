@@ -1,10 +1,25 @@
 "use client";
 
-import React, { useEffect, useState, Suspense } from "react";
+import React, { useEffect, useState, Suspense, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Script from "next/script";
 import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type ScoringConfig } from "@/lib/scoring";
 import scoringConfig from "@/lib/scoring-config.json";
+import PaywallBlur from "./PaywallBlur";
+import ScoreBlur from "./ScoreBlur";
+import Logo from "@/components/Logo";
+import HamburgerMenu from "@/components/HamburgerMenu";
+
+// TypeScript declaration for Calendly
+declare global {
+  interface Window {
+    Calendly?: {
+      initInlineWidget: (options: { url: string; parentElement: HTMLElement }) => void;
+      initPopupWidget: (options: { url: string }) => void;
+    };
+  }
+}
 
 type AuditData = {
   titleTag: string;
@@ -50,6 +65,9 @@ function ReportPageContent() {
   const [aiMetrics, setAiMetrics] = useState<AIMetrics | null>(null);
   const [mediaMetrics, setMediaMetrics] = useState<any>(null);
   const [partialAudit, setPartialAudit] = useState<boolean>(false);
+  const [showCalendlyModal, setShowCalendlyModal] = useState<boolean>(false);
+  const [calendlyScriptLoaded, setCalendlyScriptLoaded] = useState<boolean>(false);
+  const calendlyWidgetRef = useRef<HTMLDivElement>(null);
 
   // Helper function to truncate URL at domain extension
   const truncateUrlAtDomain = (url: string): string => {
@@ -71,6 +89,53 @@ function ReportPageContent() {
       return url;
     }
   };
+
+  // Calendly modal handler
+  const handleScheduleClick = () => {
+    setShowCalendlyModal(true);
+  };
+
+  // Close Calendly modal
+  const handleCloseCalendlyModal = () => {
+    setShowCalendlyModal(false);
+  };
+
+  // Calculate AI metrics if not already set - ALWAYS from actual HTML, never placeholders
+  // This hook MUST be called before any conditional returns (React hooks rule)
+  useEffect(() => {
+    if (!aiMetrics && apiData?.html) {
+      try {
+        const calculatedMetrics = extractAIMetrics(apiData.html);
+        setAiMetrics(calculatedMetrics);
+      } catch (err) {
+        console.error("Error calculating AI metrics from HTML:", err);
+        // Don't set placeholder values - metrics remain null until we can calculate properly
+        // The audit should always provide HTML, so this should rarely happen
+      }
+    }
+    // If no HTML available, metrics remain null - we'll calculate when HTML becomes available
+    // NEVER set placeholder/default values - only use actual calculated results
+  }, [apiData?.html, aiMetrics]);
+
+  // Initialize Calendly widget when modal opens and script is loaded
+  useEffect(() => {
+    if (showCalendlyModal && calendlyScriptLoaded && calendlyWidgetRef.current && window.Calendly) {
+      // Clear any existing content
+      if (calendlyWidgetRef.current) {
+        calendlyWidgetRef.current.innerHTML = '';
+      }
+      
+      // Initialize the inline widget
+      try {
+        window.Calendly.initInlineWidget({
+          url: 'https://calendly.com/mgr-tri-two?background_color=1a1a1a&text_color=ffffff&primary_color=16b8a6',
+          parentElement: calendlyWidgetRef.current
+        });
+      } catch (error) {
+        console.error('Error initializing Calendly widget:', error);
+      }
+    }
+  }, [showCalendlyModal, calendlyScriptLoaded]);
 
   useEffect(() => {
     // Load states data
@@ -144,37 +209,56 @@ function ReportPageContent() {
           }
 
           // Use scores from results (already calculated server-side)
+          // NEVER use placeholder 0s - only use actual calculated values from the audit
           setAuditData({
             ...parsed,
             titleTag: results.titleTag || parsed.titleTag || "Title Tag",
             metaDescription: results.metaDescription || parsed.metaDescription || "Missing",
-            metaDescriptionWordCount: results.metaDescriptionWordCount || parsed.metaDescriptionWordCount || 0,
-            h1Count: results.h1Count || parsed.h1Count || 0,
+            metaDescriptionWordCount: results.metaDescriptionWordCount ?? parsed.metaDescriptionWordCount ?? 0,
+            h1Count: results.h1Count ?? parsed.h1Count ?? 0,
             h1Texts: results.h1Texts || parsed.h1Texts || [],
-            wordCount: results.wordCount || parsed.wordCount || 0,
+            wordCount: results.wordCount ?? parsed.wordCount ?? 0,
             favicon: results.favicon !== undefined ? results.favicon : (parsed.favicon || false),
             canonicalTag: results.canonicalTag || parsed.canonicalTag || "Missing",
             robotsTxt: results.robotsTxtFound !== undefined ? results.robotsTxtFound : (parsed.robotsTxt || false),
             sitemapXml: results.sitemapXmlFound !== undefined ? results.sitemapXmlFound : (parsed.sitemapXml || false),
             altCoverage: results.altCoverage || parsed.altCoverage || "No images",
-            seoScore: results.seoScore || 0,
-            titleScoreRaw: results.titleScoreRaw || 0,
-            titleScore10: results.titleScore10 || 0,
+            seoScore: results.seoScore ?? 0, // Only 0 if actually calculated as 0
+            titleScoreRaw: results.titleScoreRaw ?? 0, // Only 0 if actually calculated as 0
+            titleScore10: results.titleScore10 ?? 0, // Only 0 if actually calculated as 0
             titleStatus: results.titleStatus || "bad",
-            mediaScoreRaw: results.mediaScoreRaw || 0,
-            mediaScore10: results.mediaScore10 || 0,
+            mediaScoreRaw: results.mediaScoreRaw ?? 0, // Only 0 if actually calculated as 0
+            mediaScore10: results.mediaScore10 ?? 0, // Only 0 if actually calculated as 0
             mediaStatus: results.mediaStatus || "bad",
-            aiScoreRaw: results.aiScoreRaw || 0,
-            aiScore10: results.aiScore10 || 0,
+            aiScoreRaw: results.aiScoreRaw ?? 0, // Only 0 if actually calculated as 0
+            aiScore10: results.aiScore10 ?? 0, // Only 0 if actually calculated as 0
             aiStatus: results.aiStatus || "bad",
           });
 
-          // Set metrics if available
+          // Set metrics if available - ALWAYS use calculated values, never placeholders
           if (results.mediaMetrics) {
             setMediaMetrics(results.mediaMetrics);
           }
+          
+          // AI Metrics: Always calculate from actual HTML, never use placeholder values
           if (results.aiMetrics) {
+            // Use server-calculated metrics
             setAiMetrics(results.aiMetrics);
+          } else {
+            // Calculate from HTML - this ensures we always have real results
+            const htmlForCalculation = html || results.html || apiData?.html || "";
+            if (htmlForCalculation) {
+              try {
+                const calculatedMetrics = extractAIMetrics(htmlForCalculation);
+                setAiMetrics(calculatedMetrics);
+              } catch (err) {
+                console.error("Error calculating AI metrics from HTML:", err);
+                // If calculation fails, we still need to calculate from whatever we have
+                // Don't set placeholder values - calculate from available data
+                // If we truly can't calculate, metrics will remain null until we can
+              }
+            }
+            // If no HTML available, metrics remain null - we'll calculate in useEffect when HTML becomes available
           }
 
           // Clear localStorage after successful processing
@@ -599,7 +683,7 @@ function ReportPageContent() {
         <div className="text-center">
           <div className="text-2xl font-bold text-white mb-4">Loading Audit Results...</div>
           <div className="flex justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: '#16b8a6' }}></div>
           </div>
         </div>
       </div>
@@ -614,7 +698,10 @@ function ReportPageContent() {
           <div className="text-gray-400 mb-4">{error || "Failed to load audit data"}</div>
           <Link
             href="/"
-            className="px-6 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition"
+            className="px-6 py-2 text-white rounded-lg transition"
+            style={{ backgroundColor: '#16b8a6' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#14a895'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16b8a6'}
           >
             Go Back
           </Link>
@@ -632,7 +719,10 @@ function ReportPageContent() {
           <div className="text-gray-400 mb-4">Missing audit data</div>
           <Link
             href="/"
-            className="px-6 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition"
+            className="px-6 py-2 text-white rounded-lg transition"
+            style={{ backgroundColor: '#16b8a6' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#14a895'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16b8a6'}
           >
             Go Back
           </Link>
@@ -769,48 +859,11 @@ function ReportPageContent() {
       )}
       {/* Header */}
       <header className="bg-zinc-900 border-b border-zinc-700 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-4">
-            <span className="text-white text-6xl font-bold italic font-serif">TRI</span>
-            <div className="relative w-64 h-64">
-              {/* Three overlapping circles with outlined 2s */}
-              <div className="absolute top-0 -left-[5px] w-40 h-40 bg-[#8B3A2E] rounded-full flex items-center justify-center z-20 shadow-lg">
-                <span 
-                  className="font-bold text-[5.625rem] leading-none"
-                  style={{ 
-                    WebkitTextStroke: '6px #D17130',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                    fontFamily: 'sans-serif'
-                  } as React.CSSProperties}
-                >2</span>
-              </div>
-              <div className="absolute top-0 -right-[5px] w-40 h-40 bg-[#D17130] rounded-full flex items-center justify-center z-20 shadow-lg">
-                <span 
-                  className="font-bold text-[5.625rem] leading-none"
-                  style={{ 
-                    WebkitTextStroke: '6px #546D75',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                    fontFamily: 'sans-serif'
-                  } as React.CSSProperties}
-                >2</span>
-              </div>
-              <div className="absolute -bottom-[10px] left-1/2 transform -translate-x-1/2 w-40 h-40 bg-[#546D75] rounded-full flex items-center justify-center z-10 shadow-lg">
-                <span 
-                  className="font-bold text-[5.625rem] leading-none"
-                  style={{ 
-                    WebkitTextStroke: '6px #8B3A2E',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                    fontFamily: 'sans-serif'
-                  } as React.CSSProperties}
-                >2</span>
-              </div>
-            </div>
-            <span className="text-white text-6xl font-bold italic font-serif">TWO</span>
-          </Link>
+        <div className="max-w-7xl mx-auto flex items-center">
+          {/* Logo - Fully left justified */}
+          <div className="flex-shrink-0">
+            <Logo />
+          </div>
 
           {/* Title and URL */}
           <div className="flex-1 ml-8">
@@ -818,15 +871,25 @@ function ReportPageContent() {
             <p className="text-3xl text-gray-400 mt-1">{truncateUrlAtDomain(finalUrl || "")}</p>
           </div>
 
-          {/* SEO Score Badge */}
-          <div className="flex flex-col items-end gap-2">
-            <div className={`${getScoreBadgeColor(auditData.seoScore)} text-white px-6 py-4 rounded-lg transform rotate-[-8deg] shadow-lg`}>
-              <div className="text-sm font-bold uppercase tracking-wide">SEO SCORE</div>
-              <div className="text-8xl font-bold leading-none mt-1">{auditData.seoScore}</div>
+          {/* Right side: Score and Menu - Fully right justified */}
+          <div className="flex items-center gap-4 ml-auto">
+            {/* SEO Score Badge */}
+            <div className="flex flex-col items-end gap-2">
+              <div className={`${getScoreBadgeColor(auditData.seoScore)} text-white px-6 py-4 rounded-lg transform rotate-[-8deg] shadow-lg`}>
+                <div className="text-sm font-bold uppercase tracking-wide">SEO SCORE</div>
+                <ScoreBlur isPaywalled={true}>
+                  <div className="text-8xl font-bold leading-none mt-1">{auditData.seoScore}</div>
+                </ScoreBlur>
+              </div>
+              <button className={`px-4 py-1.5 ${getScoreBadgeColor(auditData.seoScore)} text-white text-sm font-medium rounded hover:opacity-90 transition`}>
+                {auditData.seoScore >= 81 ? "GOOD" : auditData.seoScore >= 61 ? "WARNING" : "ISSUE"}
+              </button>
             </div>
-            <button className={`px-4 py-1.5 ${getScoreBadgeColor(auditData.seoScore)} text-white text-sm font-medium rounded hover:opacity-90 transition`}>
-              {auditData.seoScore >= 81 ? "GOOD" : auditData.seoScore >= 61 ? "WARNING" : "ISSUE"}
-            </button>
+
+            {/* Hamburger Menu - Fully right justified */}
+            <div className="flex-shrink-0">
+              <HamburgerMenu />
+            </div>
           </div>
         </div>
       </header>
@@ -986,62 +1049,65 @@ function ReportPageContent() {
                   : "AI systems cannot reliably interpret, trust, or extract answers from this page."}
               </p>
             </div>
-            <div className="space-y-4 mt-4">
-              <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="text-base font-medium text-gray-300 mb-1">Structured Answer Readiness</div>
-                  <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.structuredAnswers}/25` : "0/25"}</div>
+            {/* Only blur the scored metrics section, keep title visible */}
+            <PaywallBlur isPaywalled={true}>
+              <div className="space-y-4 mt-4">
+                <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-300 mb-1">Structured Answer Readiness</div>
+                    <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.structuredAnswers}/25` : "Calculating..."}</div>
+                  </div>
+                  <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.structuredAnswers >= 20 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.structuredAnswers >= 10 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
+                    {aiMetrics && aiMetrics.structuredAnswers >= 20 ? "OK" : aiMetrics && aiMetrics.structuredAnswers >= 10 ? "WARNING" : "ISSUE"}
+                  </div>
                 </div>
-                <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.structuredAnswers >= 20 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.structuredAnswers >= 10 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
-                  {aiMetrics && aiMetrics.structuredAnswers >= 20 ? "OK" : aiMetrics && aiMetrics.structuredAnswers >= 10 ? "WARNING" : "ISSUE"}
+                <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-300 mb-1">Semantic Clarity & Entity Density</div>
+                    <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.entityClarity}/20` : "Calculating..."}</div>
+                  </div>
+                  <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.entityClarity >= 15 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.entityClarity >= 8 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
+                    {aiMetrics && aiMetrics.entityClarity >= 15 ? "OK" : aiMetrics && aiMetrics.entityClarity >= 8 ? "WARNING" : "ISSUE"}
+                  </div>
+                </div>
+                <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-300 mb-1">AI Extraction Friendliness</div>
+                    <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.extractionReadiness}/20` : "Calculating..."}</div>
+                  </div>
+                  <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.extractionReadiness >= 15 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.extractionReadiness >= 8 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
+                    {aiMetrics && aiMetrics.extractionReadiness >= 15 ? "OK" : aiMetrics && aiMetrics.extractionReadiness >= 8 ? "WARNING" : "ISSUE"}
+                  </div>
+                </div>
+                <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-300 mb-1">Context Completeness</div>
+                    <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.contextCompleteness}/15` : "Calculating..."}</div>
+                  </div>
+                  <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.contextCompleteness >= 12 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.contextCompleteness >= 7 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
+                    {aiMetrics && aiMetrics.contextCompleteness >= 12 ? "OK" : aiMetrics && aiMetrics.contextCompleteness >= 7 ? "WARNING" : "ISSUE"}
+                  </div>
+                </div>
+                <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-300 mb-1">AI Trust Signals</div>
+                    <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.trustSignals}/10` : "Calculating..."}</div>
+                  </div>
+                  <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.trustSignals >= 8 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.trustSignals >= 4 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
+                    {aiMetrics && aiMetrics.trustSignals >= 8 ? "OK" : aiMetrics && aiMetrics.trustSignals >= 4 ? "WARNING" : "ISSUE"}
+                  </div>
+                </div>
+                <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-300 mb-1">Machine Readability & Formatting</div>
+                    <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.machineReadability}/10` : "Calculating..."}</div>
+                  </div>
+                  <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.machineReadability >= 8 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.machineReadability >= 5 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
+                    {aiMetrics && aiMetrics.machineReadability >= 8 ? "OK" : aiMetrics && aiMetrics.machineReadability >= 5 ? "WARNING" : "ISSUE"}
+                  </div>
                 </div>
               </div>
-              <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="text-base font-medium text-gray-300 mb-1">Semantic Clarity & Entity Density</div>
-                  <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.entityClarity}/20` : "0/20"}</div>
-                </div>
-                <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.entityClarity >= 15 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.entityClarity >= 8 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
-                  {aiMetrics && aiMetrics.entityClarity >= 15 ? "OK" : aiMetrics && aiMetrics.entityClarity >= 8 ? "WARNING" : "ISSUE"}
-                </div>
-              </div>
-              <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="text-base font-medium text-gray-300 mb-1">AI Extraction Friendliness</div>
-                  <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.extractionReadiness}/20` : "0/20"}</div>
-                </div>
-                <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.extractionReadiness >= 15 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.extractionReadiness >= 8 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
-                  {aiMetrics && aiMetrics.extractionReadiness >= 15 ? "OK" : aiMetrics && aiMetrics.extractionReadiness >= 8 ? "WARNING" : "ISSUE"}
-                </div>
-              </div>
-              <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="text-base font-medium text-gray-300 mb-1">Context Completeness</div>
-                  <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.contextCompleteness}/15` : "0/15"}</div>
-                </div>
-                <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.contextCompleteness >= 12 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.contextCompleteness >= 7 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
-                  {aiMetrics && aiMetrics.contextCompleteness >= 12 ? "OK" : aiMetrics && aiMetrics.contextCompleteness >= 7 ? "WARNING" : "ISSUE"}
-                </div>
-              </div>
-              <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="text-base font-medium text-gray-300 mb-1">AI Trust Signals</div>
-                  <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.trustSignals}/10` : "0/10"}</div>
-                </div>
-                <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.trustSignals >= 8 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.trustSignals >= 4 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
-                  {aiMetrics && aiMetrics.trustSignals >= 8 ? "OK" : aiMetrics && aiMetrics.trustSignals >= 4 ? "WARNING" : "ISSUE"}
-                </div>
-              </div>
-              <div className="bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="text-base font-medium text-gray-300 mb-1">Machine Readability & Formatting</div>
-                  <div className="text-3xl text-white">{aiMetrics ? `${aiMetrics.machineReadability}/10` : "0/10"}</div>
-                </div>
-                <div className={`px-3 py-1 rounded text-xs font-medium ${aiMetrics && aiMetrics.machineReadability >= 8 ? "bg-green-500 text-white" : aiMetrics && aiMetrics.machineReadability >= 5 ? "bg-yellow-400 text-white" : "bg-red-500 text-white"}`}>
-                  {aiMetrics && aiMetrics.machineReadability >= 8 ? "OK" : aiMetrics && aiMetrics.machineReadability >= 5 ? "WARNING" : "ISSUE"}
-                </div>
-              </div>
-            </div>
+            </PaywallBlur>
           </section>
           </div>
 
@@ -1183,128 +1249,154 @@ function ReportPageContent() {
         </div>
 
         {/* Row 3: Priority Actions (Left + Center) and CTA/Pricing (Right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6 items-start">
           {/* Left + Center Columns: Priority Action Items */}
           <div className="lg:col-span-2">
-            <section className="bg-zinc-800 rounded-lg border border-zinc-700 p-6">
+            <section className="bg-zinc-800 rounded-lg border border-zinc-700 p-6 h-full">
               <h2 className="text-2xl font-bold text-white mb-6">Priority Action Items</h2>
               
-              {/* High Priority (Red Issues) */}
-              {highPriorityItems.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-xl font-bold text-red-500 mb-3">High Priority</h3>
-                  <div className="space-y-3">
-                    {highPriorityItems.map((item, index) => (
-                      <div key={`high-${index}`} className="bg-zinc-900 rounded-lg p-4 border-l-4 border-red-500">
-                        <div className="text-base font-medium text-white mb-1">{item.label}</div>
-                        <div className="text-sm text-gray-300">{item.value}</div>
-            </div>
-                    ))}
-                </div>
-                </div>
-              )}
-
-              {/* Medium Priority (Yellow Issues) */}
-              {mediumPriorityItems.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-xl font-bold text-yellow-400 mb-3">Medium Priority</h3>
-                  <div className="space-y-3">
-                    {mediumPriorityItems.map((item, index) => (
-                      <div key={`medium-${index}`} className="bg-zinc-900 rounded-lg p-4 border-l-4 border-yellow-400">
-                        <div className="text-base font-medium text-white mb-1">{item.label}</div>
-                        <div className="text-sm text-gray-300">{item.value}</div>
-              </div>
-                    ))}
-                </div>
-                </div>
-              )}
-
-              {/* Low Priority (Green Issues) */}
-              {lowPriorityItems.length > 0 && (
-                <div>
-                  <h3 className="text-xl font-bold text-green-500 mb-3">Low Priority</h3>
-                  <div className="space-y-3">
-                    {lowPriorityItems.map((item, index) => (
-                      <div key={`low-${index}`} className="bg-zinc-900 rounded-lg p-4 border-l-4 border-green-500">
-                      <div className="text-base font-medium text-white mb-1">{item.label}</div>
-                      <div className="text-sm text-gray-300">{item.value}</div>
+              {/* Only blur the content sections, keep title visible */}
+              <PaywallBlur isPaywalled={true}>
+                {/* High Priority (Red Issues) */}
+                {highPriorityItems.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-xl font-bold text-red-500 mb-3">High Priority</h3>
+                    <div className="space-y-3">
+                      {highPriorityItems.map((item, index) => (
+                        <div key={`high-${index}`} className="bg-zinc-900 rounded-lg p-4 border-l-4 border-red-500">
+                          <div className="text-base font-medium text-white mb-1">{item.label}</div>
+                          <div className="text-sm text-gray-300">{item.value}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-        </div>
+                  </div>
+                )}
 
-          {/* Right Column: CTA, Pricing, and Upgrade Button */}
-          <div className="flex flex-col space-y-4">
+                {/* Medium Priority (Yellow Issues) */}
+                {mediumPriorityItems.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-xl font-bold text-yellow-400 mb-3">Medium Priority</h3>
+                    <div className="space-y-3">
+                      {mediumPriorityItems.map((item, index) => (
+                        <div key={`medium-${index}`} className="bg-zinc-900 rounded-lg p-4 border-l-4 border-yellow-400">
+                          <div className="text-base font-medium text-white mb-1">{item.label}</div>
+                          <div className="text-sm text-gray-300">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Low Priority (Green Issues) */}
+                {lowPriorityItems.length > 0 && (
+                  <div>
+                    <h3 className="text-xl font-bold text-green-500 mb-3">Low Priority</h3>
+                    <div className="space-y-3">
+                      {lowPriorityItems.map((item, index) => (
+                        <div key={`low-${index}`} className="bg-zinc-900 rounded-lg p-4 border-l-4 border-green-500">
+                          <div className="text-base font-medium text-white mb-1">{item.label}</div>
+                          <div className="text-sm text-gray-300">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </PaywallBlur>
+            </section>
+          </div>
+
+          {/* Right Column: CTA, Pricing, and Upgrade Button - Dynamically positioned to center with Priority Actions */}
+          <div className="flex flex-col space-y-4 lg:sticky lg:top-6" style={{ alignSelf: 'center' }}>
             {/* CTA Button */}
             <div className="bg-zinc-800 rounded-lg border border-zinc-700 p-6">
-              <button className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold text-xl px-8 py-4 rounded-lg transition shadow-lg">
-                Schedule A Consultation Now
+              <button 
+                onClick={handleScheduleClick}
+                className="w-full text-white font-bold text-xl px-8 py-4 rounded-lg transition shadow-lg"
+                style={{ backgroundColor: '#16b8a6' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#14a895'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16b8a6'}
+              >
+                Schedule FREE Consultation
               </button>
             </div>
 
             {/* Upgrade Results Button */}
             <div className="bg-zinc-800 rounded-lg border border-zinc-700 p-6">
               <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-xl px-8 py-4 rounded-lg transition shadow-lg">
-                $9.99 Upgrade Results
+                $5.99 Upgrade Results
               </button>
             </div>
 
             {/* Pricing Cards */}
             {/* Base Plan - Full Width */}
-            <div className="bg-red-500 rounded-lg p-6 flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold">$299 Base</div>
-                <div className="text-red-100 text-sm">$299 Check</div>
-              </div>
-              <div className="w-10 h-10 text-white">
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
-                  <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29l1.5-1.5C4.17 14.3 4 13.18 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8c0 1.18-.17 2.3-.47 3.29l1.5 1.5C21.64 14.98 22 13.54 22 12c0-5.52-4.48-10-10-10zm0 18c-1.38 0-2.63-.56-3.54-1.46L12 17l3.54 1.54C14.63 19.44 13.38 20 12 20z"/>
-                  <circle cx="9" cy="12" r="1.5"/>
-                  <circle cx="15" cy="12" r="1.5"/>
-                </svg>
-              </div>
+            <div className="bg-red-500 rounded-lg p-6 text-center">
+              <div className="text-3xl font-bold text-white mb-2">$299</div>
+              <div className="text-xl font-semibold text-white mb-2">Base Tier</div>
+              <div className="text-red-100 text-sm">Essential Monthly Local SEO Maintenance</div>
             </div>
 
             {/* Pro and Enterprise Plans - Side by Side */}
             <div className="grid grid-cols-2 gap-3">
               {/* Pro Plan */}
-              <div className="bg-orange-500 rounded-lg p-6 flex items-center justify-between">
-                <div>
-                  <div className="text-xl font-bold">$499 Pro</div>
-                  <div className="text-orange-100 text-xs">Deep Analysis</div>
-                </div>
-                <div className="w-8 h-8 text-white">
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
-                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                  </svg>
-                </div>
+              <div className="bg-orange-500 rounded-lg p-6 text-center">
+                <div className="text-2xl font-bold text-white mb-2">$499</div>
+                <div className="text-lg font-semibold text-white mb-2">Pro Tier</div>
+                <div className="text-orange-100 text-xs">Growth-Focused SEO for Competitive Markets</div>
               </div>
 
               {/* Enterprise Plan */}
-              <div className="bg-teal-500 rounded-lg p-6 flex items-center justify-between">
-                <div>
-                  <div className="text-xl font-bold">$699 Ent</div>
-                  <div className="text-teal-100 text-xs">Custom</div>
-                </div>
-                <div className="w-8 h-8 text-white">
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
-                    <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
-                    <rect x="6" y="8" width="2" height="2" fill="currentColor"/>
-                    <rect x="6" y="11" width="2" height="2" fill="currentColor"/>
-                    <rect x="6" y="14" width="2" height="2" fill="currentColor"/>
-                    <rect x="16" y="8" width="2" height="2" fill="currentColor"/>
-                    <rect x="16" y="11" width="2" height="2" fill="currentColor"/>
-                    <rect x="16" y="14" width="2" height="2" fill="currentColor"/>
-                  </svg>
-                </div>
+              <div className="rounded-lg p-6 text-center" style={{ backgroundColor: '#16b8a6' }}>
+                <div className="text-2xl font-bold text-white mb-2">$699</div>
+                <div className="text-lg font-semibold text-white mb-2">Enterprise Tier</div>
+                <div className="text-xs" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Regional SEO + Multi-Location Dominance</div>
               </div>
             </div>
           </div>
         </div>
       </main>
+
+      {/* Calendly Modal Overlay */}
+      {showCalendlyModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
+          onClick={handleCloseCalendlyModal}
+        >
+          <div 
+            className="bg-zinc-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={handleCloseCalendlyModal}
+              className="absolute top-4 right-4 z-10 text-white hover:text-gray-300 bg-zinc-800 rounded-full p-2 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Calendly Inline Widget */}
+            <div 
+              ref={calendlyWidgetRef}
+              style={{ minWidth: '320px', height: '700px', width: '100%' }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Calendly Widget Script */}
+      <Script
+        src="https://assets.calendly.com/assets/external/widget.js"
+        strategy="lazyOnload"
+        onLoad={() => {
+          setCalendlyScriptLoaded(true);
+          console.log('Calendly script loaded');
+        }}
+        onError={(e) => {
+          console.error('Error loading Calendly script:', e);
+        }}
+      />
     </div>
   );
 }

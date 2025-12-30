@@ -271,13 +271,13 @@ export default function Home() {
             {/* Pricing / Tier Section */}
             <div className="mt-4 w-full max-w-6xl">
               <div className="flex flex-col md:flex-row gap-4">
-                {/* Left Card - Laser Blue */}
-                <div className="flex-1 bg-laser-blue rounded-lg p-6 flex items-center justify-between">
+                {/* Left Card - Red */}
+                <div className="flex-1 bg-red-500 rounded-lg p-6 flex items-center justify-between">
                   <div>
                     <div className="text-2xl font-bold">$299 Base</div>
-                    <div className="text-light-blue-tint text-sm">Essential SEO</div>
+                    <div className="text-red-100 text-sm">$299 Check</div>
                   </div>
-                  <div className="w-10 h-10 text-white opacity-80">
+                  <div className="w-10 h-10 text-white">
                     <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
                       <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29l1.5-1.5C4.17 14.3 4 13.18 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8c0 1.18-.17 2.3-.47 3.29l1.5 1.5C21.64 14.98 22 13.54 22 12c0-5.52-4.48-10-10-10zm0 18c-1.38 0-2.63-.56-3.54-1.46L12 17l3.54 1.54C14.63 19.44 13.38 20 12 20z"/>
                       <circle cx="9" cy="12" r="1.5"/>
@@ -286,19 +286,19 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Middle Card - Mint Signal */}
-                <div className="flex-1 bg-mint-signal rounded-lg p-6 flex items-center justify-between">
+                {/* Middle Card - Yellow */}
+                <div className="flex-1 bg-yellow-500 rounded-lg p-6 flex items-center justify-between">
                   <div>
                     <div className="text-2xl font-bold">$499 Pro Tier</div>
-                    <div className="text-white text-sm opacity-90">Deep Analysis</div>
+                    <div className="text-yellow-100 text-sm">Deep Analysis</div>
                   </div>
                 </div>
 
-                {/* Right Card - Amber Warning */}
-                <div className="flex-1 bg-amber-warning rounded-lg p-6 flex items-center justify-between">
+                {/* Right Card - Teal */}
+                <div className="flex-1 bg-teal-500 rounded-lg p-6 flex items-center justify-between">
                   <div>
                     <div className="text-2xl font-bold">$699 Enterprise</div>
-                    <div className="text-white text-sm opacity-90">Custom Solutions</div>
+                    <div className="text-teal-100 text-sm">Custom Solutions</div>
                   </div>
                   <div className="w-10 h-10 text-white">
                     <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
@@ -458,8 +458,8 @@ export default function Home() {
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$699</div>
                     <div className="text-xl font-semibold text-white mb-2">Enterprise Tier</div>
-                    <div className="text-lg font-medium mb-3" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Regional SEO + Multi-Location Dominance</div>
-                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
+                    <div className="text-lg font-medium text-teal-100 mb-3">Regional SEO + Multi-Location Dominance</div>
+                    <p className="text-teal-100 text-sm leading-relaxed">
                       Built for companies expanding into multiple cities or running multiple service divisions.
                     </p>
                   </div>

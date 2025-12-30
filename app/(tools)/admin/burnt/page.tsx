@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -9,7 +9,7 @@ import type { BurntScoreAPIResponse, BurntOrchestrateAPIResponse, Action, Priori
 
 type TabType = "score" | "orchestrate";
 
-export default function AdminBurntPage() {
+function AdminBurntPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
@@ -506,6 +506,23 @@ export default function AdminBurntPage() {
             )}
           </div>
         </main>
+  );
+}
+
+export default function AdminBurntPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-[calc(100vh-200px)] px-6 py-12">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: '#2F80FF' }}></div>
+            <p className="text-cool-ash">Loading...</p>
+          </div>
+        </div>
+      </main>
+    }>
+      <AdminBurntPageContent />
+    </Suspense>
   );
 }
 

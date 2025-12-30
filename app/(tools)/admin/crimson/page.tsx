@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 // BrandLogo and HamburgerMenu are now in the layout
 import type { CrimsonAPIResponse } from "@/lib/llms/types";
 
-export default function AdminCrimsonPage() {
+function AdminCrimsonPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
@@ -301,6 +301,23 @@ export default function AdminCrimsonPage() {
             )}
           </div>
         </main>
+  );
+}
+
+export default function AdminCrimsonPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-[calc(100vh-200px)] px-6 py-12">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: '#2F80FF' }}></div>
+            <p className="text-cool-ash">Loading...</p>
+          </div>
+        </div>
+      </main>
+    }>
+      <AdminCrimsonPageContent />
+    </Suspense>
   );
 }
 

@@ -260,7 +260,7 @@ function AdminBurntPageContent() {
               Prioritize actions into an execution order
             </p>
 
-            {/* Tabs */}
+            {/* Tabs - Only Score Actions available */}
             <div className="flex gap-4 mb-8 border-b border-steel-gray">
               <button
                 onClick={() => setActiveTab("score")}
@@ -271,16 +271,6 @@ function AdminBurntPageContent() {
                 }`}
               >
                 Score Actions
-              </button>
-              <button
-                onClick={() => setActiveTab("orchestrate")}
-                className={`px-6 py-3 font-semibold border-b-2 transition-colors ${
-                  activeTab === "orchestrate"
-                    ? "border-laser-blue text-laser-blue"
-                    : "border-transparent text-cool-ash hover:text-cool-ash"
-                }`}
-              >
-                Full Run
               </button>
             </div>
 
@@ -371,139 +361,6 @@ function AdminBurntPageContent() {
               </div>
             )}
 
-            {/* Full Run Tab */}
-            {activeTab === "orchestrate" && (
-              <div>
-                <form onSubmit={handleFullRun} className="mb-8 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-cool-ash mb-2">
-                      URL *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="https://example.com"
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      disabled={loading}
-                      className="w-full px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
-                      style={{ '--tw-ring-color': '#2F80FF' } as React.CSSProperties}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-cool-ash mb-3">
-                      Steps to Run
-                    </label>
-                    <div className="space-y-3">
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={runAudit}
-                          onChange={(e) => setRunAudit(e.target.checked)}
-                          disabled={loading}
-                          className="w-5 h-5"
-                          style={{ accentColor: '#2F80FF' }}
-                        />
-                        <div>
-                          <div className="font-semibold">Run Audit</div>
-                          <div className="text-sm text-cool-ash">Baseline diagnostics and scoring</div>
-                        </div>
-                      </label>
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={runMidnight}
-                          onChange={(e) => setRunMidnight(e.target.checked)}
-                          disabled={loading}
-                          className="w-5 h-5"
-                          style={{ accentColor: '#2F80FF' }}
-                        />
-                        <div>
-                          <div className="font-semibold">Run Midnight</div>
-                          <div className="text-sm text-cool-ash">Homepage structure analysis</div>
-                        </div>
-                      </label>
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={runCrimson}
-                          onChange={(e) => setRunCrimson(e.target.checked)}
-                          disabled={loading}
-                          className="w-5 h-5"
-                          style={{ accentColor: '#2F80FF' }}
-                        />
-                        <div>
-                          <div className="font-semibold">Run Crimson</div>
-                          <div className="text-sm text-cool-ash">Content optimization</div>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full px-8 py-4 bg-[#2F80FF] hover:bg-[#2F80FF] text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? "Running Orchestration..." : "Run Full Orchestration"}
-                  </button>
-                </form>
-
-                {orchestrateResults && (
-                  <div className="space-y-6">
-                    {orchestrateResults.audit && (
-                      <div className="bg-obsidian rounded-lg border border-steel-gray p-6">
-                        <h2 className="text-2xl font-bold mb-4">Audit Results</h2>
-                        <div className="text-cool-ash">SEO Score: {orchestrateResults.audit.seoScore || 'N/A'}</div>
-                      </div>
-                    )}
-
-                    {orchestrateResults.midnight && (
-                      <div className="bg-obsidian rounded-lg border border-steel-gray p-6">
-                        <h2 className="text-2xl font-bold mb-4">Midnight Results</h2>
-                        <div className="text-cool-ash">
-                          {orchestrateResults.midnight.structureRecommendations.length} structure recommendations
-                        </div>
-                      </div>
-                    )}
-
-                    {orchestrateResults.crimson && (
-                      <div className="bg-obsidian rounded-lg border border-steel-gray p-6">
-                        <h2 className="text-2xl font-bold mb-4">Crimson Results</h2>
-                        <div className="text-cool-ash">
-                          {orchestrateResults.crimson.contentEdits.length} content edits,
-                          {orchestrateResults.crimson.ctaSuggestions.length} CTA suggestions
-                        </div>
-                      </div>
-                    )}
-
-                    {orchestrateResults.burnt.prioritizedActions.length > 0 && (
-                      <div className="bg-obsidian rounded-lg border border-steel-gray p-6">
-                        <h2 className="text-2xl font-bold mb-4">Prioritized Actions</h2>
-                        <div className="space-y-4">
-                          {orchestrateResults.burnt.prioritizedActions.map((action: PrioritizedAction, idx: number) => (
-                            <div key={idx} className="border-b border-steel-gray pb-4 last:border-0">
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1">
-                                  <div className="font-semibold">{action.title}</div>
-                                  <div className="text-cool-ash text-sm mt-1">{action.description}</div>
-                                </div>
-                                <div className="text-right ml-4">
-                                  <div className="text-xl font-bold text-laser-blue">{action.burntScore.total}</div>
-                                  <div className={`text-sm font-semibold ${getPriorityBandColor(action.priorityBand)}`}>
-                                    {action.priorityBand}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </main>
   );

@@ -267,7 +267,7 @@ function AdminMidnightPageContent() {
                       onClick={() => {
                         const encodedUrl = encodeURIComponent(urlInput);
                         const encodedGoal = encodeURIComponent("Improve page messaging clarity and conversion based on Midnight diagnosis");
-                        router.push(`/admin/crimson/create?url=${encodedUrl}&goal=${encodedGoal}`);
+                        router.push(`/admin/crimson/review?url=${encodedUrl}&goal=${encodedGoal}`);
                       }}
                       className="w-full text-left px-6 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition"
                     >

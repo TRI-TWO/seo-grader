@@ -6,37 +6,37 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 // BrandLogo and HamburgerMenu are now in the layout
 import type { CrimsonAPIResponse } from "@/lib/llms/types";
-import { getTemplateConfig, buildGoalFromTemplateFields, type TemplateConfig } from "@/lib/crimson/templates";
 
-function AdminCrimsonCreatePageContent() {
+function AdminCrimsonReviewPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [templateConfig, setTemplateConfig] = useState<TemplateConfig | null>(null);
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [urlInput, setUrlInput] = useState("");
+  const [goal, setGoal] = useState("");
+  const [tonePreset, setTonePreset] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<CrimsonAPIResponse | null>(null);
-  const [showStepIndicator, setShowStepIndicator] = useState(false);
 
   useEffect(() => {
     checkAdminAccess();
     
-    // Get template ID from query params
-    const templateId = searchParams.get('templateId') || searchParams.get('contentType');
+    // Pre-populate from query parameters (locked fields)
     const urlParam = searchParams.get('url');
-    
-    if (templateId) {
-      const config = getTemplateConfig(templateId);
-      if (config) {
-        setTemplateConfig(config);
-        setShowStepIndicator(true);
-      }
-    }
+    const goalParam = searchParams.get('goal');
+    const toneParam = searchParams.get('tone');
     
     if (urlParam) {
       setUrlInput(decodeURIComponent(urlParam));
+    }
+    if (goalParam) {
+      setGoal(decodeURIComponent(goalParam));
+    } else {
+      // Default goal for Midnight handoff
+      setGoal("Improve clarity, trust, and conversion based on Midnight diagnosis");
+    }
+    if (toneParam) {
+      setTonePreset(decodeURIComponent(toneParam));
     }
   }, [searchParams]);
 
@@ -63,41 +63,11 @@ function AdminCrimsonCreatePageContent() {
     }
   };
 
-  const handleFieldChange = (fieldName: string, value: string) => {
-    setFieldValues(prev => ({
-      ...prev,
-      [fieldName]: value
-    }));
-  };
-
   const handleRunCrimson = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!templateConfig) {
-      setError("No template selected");
-      return;
-    }
-
-    // Validate required fields
-    const missingFields = templateConfig.fields
-      .filter(field => field.required && !fieldValues[field.name]?.trim())
-      .map(field => field.label);
-    
-    if (missingFields.length > 0) {
-      setError(`Please fill in required fields: ${missingFields.join(', ')}`);
-      return;
-    }
-
     const trimmedUrl = urlInput.trim();
-    if (!trimmedUrl) {
-      setError("Please enter a URL");
-      return;
-    }
-
-    // Build goal from template fields
-    const goal = buildGoalFromTemplateFields(templateConfig.id, fieldValues);
-    if (!goal) {
-      setError("Failed to build goal from template fields");
+    if (!trimmedUrl || !goal.trim()) {
+      setError("Please enter both URL and goal");
       return;
     }
 
@@ -116,8 +86,8 @@ function AdminCrimsonCreatePageContent() {
         },
         body: JSON.stringify({
           url: trimmedUrl,
-          goal: goal,
-          tonePreset: fieldValues.tone || fieldValues.brand_voice || undefined,
+          goal: goal.trim(),
+          tonePreset: tonePreset.trim() || undefined,
         }),
         signal: controller.signal,
       });
@@ -161,71 +131,6 @@ function AdminCrimsonCreatePageContent() {
     }
   };
 
-  const renderField = (field: any) => {
-    const value = fieldValues[field.name] || '';
-    
-    if (field.type === 'textarea') {
-      return (
-        <textarea
-          key={field.name}
-          placeholder={field.placeholder}
-          value={value}
-          onChange={(e) => handleFieldChange(field.name, e.target.value)}
-          disabled={loading || field.locked}
-          rows={3}
-          required={field.required}
-          className="w-full px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
-          style={{ '--tw-ring-color': '#2F80FF' } as React.CSSProperties}
-        />
-      );
-    } else if (field.type === 'select') {
-      return (
-        <select
-          key={field.name}
-          value={value}
-          onChange={(e) => handleFieldChange(field.name, e.target.value)}
-          disabled={loading || field.locked}
-          required={field.required}
-          className="w-full px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
-          style={{ '--tw-ring-color': '#2F80FF' } as React.CSSProperties}
-        >
-          <option value="">Select {field.label}</option>
-          {field.options?.map((option: string) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
-      );
-    } else if (field.type === 'number') {
-      return (
-        <input
-          key={field.name}
-          type="number"
-          placeholder={field.placeholder}
-          value={value}
-          onChange={(e) => handleFieldChange(field.name, e.target.value)}
-          disabled={loading || field.locked}
-          required={field.required}
-          className="w-full px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
-          style={{ '--tw-ring-color': '#2F80FF' } as React.CSSProperties}
-        />
-      );
-    } else {
-      return (
-        <input
-          key={field.name}
-          type="text"
-          placeholder={field.placeholder}
-          value={value}
-          onChange={(e) => handleFieldChange(field.name, e.target.value)}
-          disabled={loading || field.locked}
-          required={field.required}
-          className="w-full px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
-          style={{ '--tw-ring-color': '#2F80FF' } as React.CSSProperties}
-        />
-      );
-    }
-  };
-
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-void-black text-white flex items-center justify-center">
@@ -234,24 +139,6 @@ function AdminCrimsonCreatePageContent() {
           <p>Loading...</p>
         </div>
       </div>
-    );
-  }
-
-  if (!templateConfig) {
-    return (
-      <main className="min-h-[calc(100vh-200px)] px-6 py-12">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-6">
-            <Link href="/admin" className="text-laser-blue hover:text-light-blue-tint">
-              ← Back to Admin Dashboard
-            </Link>
-          </div>
-          <div className="bg-red-600 border border-red-700 rounded-lg px-6 py-4">
-            <div className="text-white font-semibold mb-2">Error</div>
-            <div className="text-red-100">No template selected. Please select a template first.</div>
-          </div>
-        </div>
-      </main>
     );
   }
 
@@ -264,20 +151,13 @@ function AdminCrimsonCreatePageContent() {
           </Link>
         </div>
 
-        {showStepIndicator && (
-          <div className="mb-6 text-sm text-gray-400">
-            Step 2 of 2: Confirm URL and goal
-          </div>
-        )}
-
-        <h1 className="text-4xl font-bold mb-2">{templateConfig.title}</h1>
-        <p className="text-gray-400 text-sm mb-2">{templateConfig.description}</p>
+        <h1 className="text-4xl font-bold mb-2">Crimson</h1>
+        <p className="text-gray-400 text-sm mb-2">Edit and optimize page content based on Midnight findings.</p>
         <p className="text-cool-ash mb-8">
-          Fill in the details below to generate optimized content
+          Review and refine page messaging, trust signals, and conversion elements
         </p>
 
         <form onSubmit={handleRunCrimson} className="mb-8 space-y-4">
-          {/* URL field - always present */}
           <div>
             <label className="block text-sm font-medium text-cool-ash mb-2">
               URL *
@@ -287,22 +167,44 @@ function AdminCrimsonCreatePageContent() {
               placeholder="https://example.com"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
-              disabled={loading}
-              required
-              className="w-full px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
+              disabled={true}
+              className="w-full px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ '--tw-ring-color': '#2F80FF' } as React.CSSProperties}
             />
+            <p className="text-xs text-gray-500 mt-1">This field is locked from Midnight handoff</p>
           </div>
 
-          {/* Template-specific fields */}
-          {templateConfig.fields.map((field) => (
-            <div key={field.name}>
-              <label className="block text-sm font-medium text-cool-ash mb-2">
-                {field.label} {field.required && '*'}
-              </label>
-              {renderField(field)}
-            </div>
-          ))}
+          <div>
+            <label className="block text-sm font-medium text-cool-ash mb-2">
+              Goal *
+            </label>
+            <textarea
+              placeholder="e.g., Improve clarity, trust, and conversion based on Midnight diagnosis"
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              disabled={true}
+              rows={3}
+              className="w-full px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ '--tw-ring-color': '#2F80FF' } as React.CSSProperties}
+            />
+            <p className="text-xs text-gray-500 mt-1">This field is locked from Midnight handoff</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-cool-ash mb-2">
+              Tone Preset (optional)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g., Professional, Friendly, Authoritative"
+              value={tonePreset}
+              onChange={(e) => setTonePreset(e.target.value)}
+              disabled={true}
+              className="w-full px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ '--tw-ring-color': '#2F80FF' } as React.CSSProperties}
+            />
+            <p className="text-xs text-gray-500 mt-1">This field is locked from Midnight handoff</p>
+          </div>
 
           <button
             type="submit"
@@ -407,7 +309,7 @@ function AdminCrimsonCreatePageContent() {
   );
 }
 
-export default function AdminCrimsonCreatePage() {
+export default function AdminCrimsonReviewPage() {
   return (
     <Suspense fallback={
       <main className="min-h-[calc(100vh-200px)] px-6 py-12">
@@ -419,7 +321,8 @@ export default function AdminCrimsonCreatePage() {
         </div>
       </main>
     }>
-      <AdminCrimsonCreatePageContent />
+      <AdminCrimsonReviewPageContent />
     </Suspense>
   );
 }
+

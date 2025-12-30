@@ -89,13 +89,6 @@ function AdminCrimsonPageContent() {
 
   useEffect(() => {
     checkAdminAccess();
-    
-    // If URL and goal params exist (workflow handoff), redirect to create page
-    const urlParam = searchParams.get('url');
-    const goalParam = searchParams.get('goal');
-    if (urlParam && goalParam) {
-      router.replace(`/admin/crimson/create?url=${encodeURIComponent(urlParam)}&goal=${encodeURIComponent(goalParam)}`);
-    }
   }, [searchParams, router]);
 
   const checkAdminAccess = async () => {
@@ -122,7 +115,7 @@ function AdminCrimsonPageContent() {
   };
 
   const handleTemplateSelect = (template: Template) => {
-    router.push(`/admin/crimson/create?contentType=${template.id}&defaultSeoIntent=${template.seoIntent}`);
+    router.push(`/admin/crimson/create?templateId=${template.id}`);
   };
 
   if (!isAdmin) {
@@ -146,7 +139,7 @@ function AdminCrimsonPageContent() {
         </div>
 
         <h1 className="text-4xl font-bold mb-2">Crimson</h1>
-        <p className="text-gray-400 text-sm mb-2">Improve what the page says based on your goal.</p>
+        <p className="text-gray-400 text-sm mb-2">Choose what you want to create or improve.</p>
         <p className="text-gray-400 text-sm mb-8">Pick a template to start, then confirm the URL and goal on the next step.</p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

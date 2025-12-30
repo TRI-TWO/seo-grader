@@ -1256,9 +1256,9 @@ function ReportPageContent() {
         </div>
 
         {/* Row 3: Priority Actions (Left + Center) and CTA/Pricing (Right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6 items-start">
+        <div className={`grid grid-cols-1 ${isAdmin ? 'lg:grid-cols-1' : 'lg:grid-cols-3'} gap-6 mt-6 items-start`}>
           {/* Left + Center Columns: Priority Action Items */}
-          <div className="lg:col-span-2">
+          <div className={isAdmin ? 'lg:col-span-1' : 'lg:col-span-2'}>
             <section className="bg-zinc-800 rounded-lg border border-zinc-700 p-6 h-full">
               <h2 className="text-2xl font-bold text-white mb-6">Priority Action Items</h2>
               
@@ -1320,53 +1320,26 @@ function ReportPageContent() {
               {/* Admin-only Next Steps Panel */}
               {isAdmin && (
                 <div className="mt-6 pt-6 border-t border-zinc-700">
-                  <h3 className="text-2xl font-bold text-white mb-2">What would you like to do next?</h3>
-                  <p className="text-gray-400 text-sm mb-6">
-                    Choose how you want to continue working with these results. You can explore why issues exist, improve specific content, or organize what needs to be done.
-                  </p>
-                  <div className="space-y-4">
-                    <button
-                      onClick={() => {
-                        const encodedUrl = encodeURIComponent(finalUrl);
-                        router.push(`/admin/midnight?url=${encodedUrl}`);
-                      }}
-                      className="w-full text-left px-6 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition"
-                    >
-                      <div className="font-semibold text-white mb-1">Explore what's affecting this page</div>
-                      <div className="text-sm text-gray-400">Review structure and flow before making changes</div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        const encodedUrl = encodeURIComponent(finalUrl);
-                        const encodedGoal = encodeURIComponent("Improve clarity, trust, and conversion based on audit findings");
-                        router.push(`/admin/crimson/create?url=${encodedUrl}&goal=${encodedGoal}`);
-                      }}
-                      className="w-full text-left px-6 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition"
-                    >
-                      <div className="font-semibold text-white mb-1">Refine messaging and trust signals</div>
-                      <div className="text-sm text-gray-400">Improve wording, credibility, and conversions</div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        // Collect all action items
-                        const allActions = [
-                          ...highPriorityItems,
-                          ...mediumPriorityItems,
-                          ...lowPriorityItems
-                        ];
-                        // Format as: "Label: Value on {url}"
-                        const formattedActions = allActions.map(item => 
-                          `${item.label}: ${item.value} on ${finalUrl}`
-                        ).join('\n');
-                        const encodedActions = encodeURIComponent(formattedActions);
-                        router.push(`/admin/burnt?tab=score&actions=${encodedActions}`);
-                      }}
-                      className="w-full text-left px-6 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition"
-                    >
-                      <div className="font-semibold text-white mb-1">Organize what to do first</div>
-                      <div className="text-sm text-gray-400">Prioritize action items into an execution order</div>
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => {
+                      // Collect all action items
+                      const allActions = [
+                        ...highPriorityItems,
+                        ...mediumPriorityItems,
+                        ...lowPriorityItems
+                      ];
+                      // Format as: "Label: Value on {url}"
+                      const formattedActions = allActions.map(item => 
+                        `${item.label}: ${item.value} on ${finalUrl}`
+                      ).join('\n');
+                      const encodedActions = encodeURIComponent(formattedActions);
+                      router.push(`/admin/burnt?tab=score&actions=${encodedActions}`);
+                    }}
+                    className="w-full text-left px-6 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition"
+                  >
+                    <div className="font-semibold text-white mb-1">Organize these actions</div>
+                    <div className="text-sm text-gray-400">Prioritize action items into an execution order</div>
+                  </button>
                 </div>
               )}
             </section>

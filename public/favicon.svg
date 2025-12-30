@@ -1,0 +1,7 @@
+<svg width="32" height="32" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simplified version for favicon -->
+  <path d="M60 20 L100 50 L60 80 L20 50 Z" stroke="#2F80FF" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M60 20 L70 27" stroke="#2F80FF" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <polygon points="70,27 65,30 68,28 70,27" fill="#2F80FF"/>
+</svg>
+

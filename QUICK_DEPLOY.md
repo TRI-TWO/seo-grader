@@ -137,3 +137,5 @@ git push -u origin feature/frontend-job-flow
    - Monitor function logs
    - Watch Supabase database for job states
 
+
+

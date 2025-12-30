@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createBrowserClient } from '@/lib/supabase/client'
 import { NextResponse } from 'next/server'
 import type { User } from '@supabase/supabase-js'
+import { prisma } from '@/lib/prisma'
 
 export type UserRole = 'ADMIN' | 'VISITOR'
 
@@ -72,16 +73,35 @@ export async function requireAuth(): Promise<{ user: User; role: UserRole } | nu
 
 /**
  * Require admin role for API routes
+ * Checks both Supabase user metadata and Prisma User table for ADMIN role
  * Returns the user if admin, or null if not
  */
 export async function requireAdmin(): Promise<User | null> {
   const authResult = await requireAuth()
   
-  if (!authResult || authResult.role !== 'ADMIN') {
+  if (!authResult) {
     return null
   }
   
-  return authResult.user
+  // Check Supabase user metadata first
+  if (authResult.role === 'ADMIN') {
+    // Also verify in Prisma User table
+    try {
+      const prismaUser = await prisma.user.findUnique({
+        where: { email: authResult.user.email || '' },
+      })
+      
+      if (prismaUser && prismaUser.role === 'ADMIN') {
+        return authResult.user
+      }
+    } catch (error) {
+      console.error('Error checking Prisma user:', error)
+      // Fallback to Supabase metadata if Prisma check fails
+      return authResult.user
+    }
+  }
+  
+  return null
 }
 
 /**
@@ -97,3 +117,5 @@ export function unauthorizedResponse(message = 'Unauthorized') {
 export function forbiddenResponse(message = 'Forbidden') {
   return NextResponse.json({ error: message }, { status: 403 })
 }
+
+

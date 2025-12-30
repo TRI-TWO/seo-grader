@@ -592,3 +592,5 @@ The SEO Grader evaluates **22 distinct components** across 4 scoring categories:
 
 All components are weighted and combined to produce a comprehensive SEO assessment from 0-100 points.
 
+
+

@@ -4,8 +4,13 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata: Metadata = {
-  title: 'Tri-Two SEO Grader',
-  description: 'SEO health check and grading tool',
+  title: 'TRI-TWO | Precision SEO Platform',
+  description: 'TRI-TWO is a precision SEO platform that evaluates systems, not guesses.',
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
 }
 
 export default function RootLayout({
@@ -16,6 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       </head>
       <body>
         <Providers>{children}</Providers>

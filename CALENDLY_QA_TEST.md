@@ -178,3 +178,5 @@ If tests fail:
 - [ ] Check browser console for errors
 - [ ] Verify Calendly account is active
 - [ ] Check network connectivity
+
+

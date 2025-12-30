@@ -82,3 +82,5 @@ git remote set-url origin https://github.com/TRI-TWO/seo-grader.git
 
 Option D (credential helper) is the most secure as it stores the token in your macOS keychain.
 
+
+

@@ -108,3 +108,5 @@ Once DATABASE_URL is updated and migration is run:
 ## Documentation Created
 
 - `SUPABASE_CONNECTION_SETUP.md` - Detailed guide for getting connection string and setting up database
+
+

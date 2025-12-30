@@ -36,3 +36,5 @@ SUPABASE_SERVICE_ROLE_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXB
 3. Get Upstash credentials
 4. Deploy to Vercel with all environment variables
 
+
+

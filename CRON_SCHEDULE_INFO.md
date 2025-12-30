@@ -59,3 +59,5 @@ If you need more frequent processing:
 ✅ Compatible with Hobby plan
 ✅ Jobs will process once per hour
 
+
+

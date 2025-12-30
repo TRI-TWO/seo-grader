@@ -131,12 +131,61 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-white relative overflow-hidden">
-      {/* Geometric pattern background */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,0.05) 35px, rgba(255,255,255,0.05) 70px)`,
-        }}></div>
+    <div className="min-h-screen bg-void-black text-white relative overflow-hidden">
+      {/* Abstract data landscape background */}
+      <div className="absolute inset-0">
+        {/* Base dark background */}
+        <div className="absolute inset-0 bg-void-black"></div>
+        
+        {/* Topographic lines - soft wave/grid data surface */}
+        <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 1200 800" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="topoGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#2F80FF" stopOpacity="0.1" />
+              <stop offset="100%" stopColor="#2F80FF" stopOpacity="0.05" />
+            </linearGradient>
+          </defs>
+          {/* Faint topographic contour lines */}
+          <path d="M0,600 Q300,550 600,580 T1200,600" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.15" />
+          <path d="M0,650 Q300,600 600,630 T1200,650" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.12" />
+          <path d="M0,700 Q300,650 600,680 T1200,700" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.1" />
+          {/* Grid data surface */}
+          <g opacity="0.08">
+            {Array.from({ length: 15 }).map((_, i) => (
+              <line key={`h-${i}`} x1="0" y1={i * 50} x2="1200" y2={i * 50} stroke="#2F80FF" strokeWidth="0.5" />
+            ))}
+            {Array.from({ length: 20 }).map((_, i) => (
+              <line key={`v-${i}`} x1={i * 60} y1="0" x2={i * 60} y2="800" stroke="#2F80FF" strokeWidth="0.5" />
+            ))}
+          </g>
+        </svg>
+        
+        {/* Thin laser-blue path lines */}
+        <svg className="absolute inset-0 w-full h-full opacity-30" viewBox="0 0 1200 800" preserveAspectRatio="none">
+          <path d="M100,400 Q400,300 700,350 T1200,400" stroke="#2F80FF" strokeWidth="1.5" fill="none" opacity="0.4" />
+          <path d="M200,500 Q500,450 800,480 T1200,500" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.3" />
+        </svg>
+        
+        {/* Sparse mint node dots */}
+        <div className="absolute inset-0">
+          {Array.from({ length: 12 }).map((_, i) => {
+            const x = Math.random() * 100;
+            const y = 60 + Math.random() * 40; // Lower 40% of screen
+            return (
+              <div
+                key={i}
+                className="absolute rounded-full bg-mint-signal opacity-30"
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  width: '4px',
+                  height: '4px',
+                  boxShadow: '0 0 6px rgba(46, 211, 183, 0.4)',
+                }}
+              />
+            );
+          })}
+        </div>
       </div>
 
       <div className="relative z-10">
@@ -155,17 +204,17 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Content block - Centered, 5px below header */}
-        <div className="mt-[5px] flex justify-center">
-          <div className="flex flex-col gap-4 items-center">
+        {/* Content block - Centered, upper 60% safe zone */}
+        <div className="mt-[5px] flex justify-center min-h-[60vh] items-center">
+          <div className="flex flex-col gap-6 items-center max-w-4xl px-6">
             {/* Main Heading */}
-            <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-center">
-              EMPOWER YOUR SEO
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-center uppercase" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              EVALUATE SYSTEMS, NOT GUESSES
             </h1>
 
             {/* Subheading */}
-            <p className="text-xl md:text-2xl text-gray-300 text-center">
-              CLARITY. CONFIDENCE. CONTROL.
+            <p className="text-xl md:text-2xl text-cool-ash text-center font-medium">
+              Precision SEO platform for technical evaluation and optimization
             </p>
 
             {/* URL Input Section */}
@@ -185,14 +234,14 @@ export default function Home() {
                   }
                 }}
                 disabled={loading}
-                className="flex-1 px-6 py-4 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ '--tw-ring-color': '#16b8a6' } as React.CSSProperties}
+                className="flex-1 px-6 py-4 bg-obsidian border border-steel-gray rounded-lg text-white placeholder-cool-ash focus:outline-none focus:ring-2 focus:border-laser-blue disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ '--tw-ring-color': '#2F80FF' } as React.CSSProperties}
               />
               <button
                 type="button"
                 onClick={handleUrlSubmit}
                 disabled={loading}
-                className="px-8 py-4 bg-[#8B4513] hover:bg-[#A0522D] text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-8 py-4 bg-laser-blue hover:bg-opacity-90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Processing..." : "Free"}
               </button>
@@ -201,11 +250,11 @@ export default function Home() {
             {/* Loading State */}
             {loading && (
               <div className="mt-4 text-center">
-                <div className="text-xl text-gray-300 mb-4">Running SEO audit...</div>
+                <div className="text-xl text-cool-ash mb-4">Running SEO audit...</div>
                 <div className="flex justify-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: '#16b8a6' }}></div>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-laser-blue"></div>
                 </div>
-                <div className="text-gray-400 text-sm mt-4">This may take up to 25 seconds</div>
+                <div className="text-cool-ash text-sm mt-4">This may take up to 25 seconds</div>
               </div>
             )}
             
@@ -246,7 +295,7 @@ export default function Home() {
                 </div>
 
                 {/* Right Card - Green */}
-                <div className="flex-1 rounded-lg p-6 flex items-center justify-between" style={{ backgroundColor: '#16b8a6' }}>
+                <div className="flex-1 rounded-lg p-6 flex items-center justify-between bg-mint-signal">
                   <div>
                     <div className="text-2xl font-bold">$699 Enterprise</div>
                     <div className="text-sm" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Custom Solutions</div>
@@ -405,7 +454,7 @@ export default function Home() {
                 </div>
 
                 {/* Enterprise Plan */}
-                <div className="rounded-lg p-8 flex flex-col" style={{ backgroundColor: '#16b8a6' }}>
+                <div className="rounded-lg p-8 flex flex-col bg-mint-signal">
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$699</div>
                     <div className="text-xl font-semibold text-white mb-2">Enterprise Tier</div>
@@ -465,7 +514,7 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  <button className="w-full py-3 bg-white hover:bg-gray-100 font-semibold rounded-lg transition-colors" style={{ color: '#16b8a6' }}>
+                  <button className="w-full py-3 bg-white hover:bg-gray-100 font-semibold rounded-lg transition-colors text-mint-signal">
                     Contact Sales
                   </button>
                 </div>
@@ -485,14 +534,14 @@ export default function Home() {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="bg-zinc-900">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-900">SEO Health Monitoring</td>
+                      <tr className="bg-obsidian">
+                        <td className="p-4 text-cool-ash sticky left-0 z-10 bg-obsidian">SEO Health Monitoring</td>
                         <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                         <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                         <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                       </tr>
-                      <tr className="bg-zinc-800">
-                        <td className="p-4 text-gray-300 sticky left-0 z-10 bg-zinc-800">Google Indexing & Crawl Checks</td>
+                      <tr className="bg-steel-gray">
+                        <td className="p-4 text-cool-ash sticky left-0 z-10 bg-steel-gray">Google Indexing & Crawl Checks</td>
                         <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                         <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
                         <td className="p-4 text-center"><span className="text-green-500 text-2xl">✅</span></td>
@@ -632,7 +681,7 @@ export default function Home() {
                           </button>
                         </td>
                         <td className="p-4 text-center">
-                          <button className="w-full py-3 text-white font-semibold rounded-lg transition-colors" style={{ backgroundColor: '#16b8a6' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#14a895'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16b8a6'}>
+                          <button className="w-full py-3 text-white font-semibold rounded-lg transition-colors bg-mint-signal hover:bg-opacity-90">
                             Contact Sales
                           </button>
                         </td>

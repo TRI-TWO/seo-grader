@@ -526,3 +526,5 @@ This is a **production-ready, scalable architecture** that:
 
 The main constraint is **Vercel's function timeout limits**, which may require upgrading to Pro plan for jobs that take longer than the free tier allows.
 
+
+

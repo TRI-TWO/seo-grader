@@ -330,12 +330,12 @@ export default function Home() {
               {/* Tier Cards Section */}
               <div className="grid md:grid-cols-3 gap-6">
                 {/* Base Plan */}
-                <div className="bg-laser-blue rounded-lg p-8 flex flex-col">
+                <div className="bg-red-500 rounded-lg p-8 flex flex-col">
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$299</div>
                     <div className="text-xl font-semibold text-white mb-2">Base Tier</div>
-                    <div className="text-lg font-medium text-light-blue-tint mb-3">Essential Monthly Local SEO Maintenance</div>
-                    <p className="text-light-blue-tint text-sm leading-relaxed">
+                    <div className="text-lg font-medium text-red-100 mb-3">Essential Monthly Local SEO Maintenance</div>
+                    <p className="text-red-100 text-sm leading-relaxed">
                       Designed for contractors who need consistent visibility without heavy content or link work.
                     </p>
                   </div>
@@ -386,18 +386,18 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-laser-blue font-semibold rounded-lg transition-colors">
+                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-red-500 font-semibold rounded-lg transition-colors">
                     Get Started
                   </button>
                 </div>
 
                 {/* Pro Plan */}
-                <div className="bg-mint-signal rounded-lg p-8 flex flex-col">
+                <div className="bg-yellow-500 rounded-lg p-8 flex flex-col">
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$499</div>
                     <div className="text-xl font-semibold text-white mb-2">Pro Tier</div>
-                    <div className="text-lg font-medium text-white mb-3 opacity-90">Growth-Focused SEO for Competitive Markets</div>
-                    <p className="text-white text-sm leading-relaxed opacity-90">
+                    <div className="text-lg font-medium text-yellow-100 mb-3">Growth-Focused SEO for Competitive Markets</div>
+                    <p className="text-yellow-100 text-sm leading-relaxed">
                       For businesses actively trying to rank over competitors and expand service visibility.
                     </p>
                   </div>
@@ -448,13 +448,13 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-mint-signal font-semibold rounded-lg transition-colors">
+                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-yellow-500 font-semibold rounded-lg transition-colors">
                     Get Started
                   </button>
                 </div>
 
                 {/* Enterprise Plan */}
-                <div className="rounded-lg p-8 flex flex-col bg-mint-signal">
+                <div className="rounded-lg p-8 flex flex-col bg-teal-500">
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$699</div>
                     <div className="text-xl font-semibold text-white mb-2">Enterprise Tier</div>
@@ -671,17 +671,17 @@ export default function Home() {
                       <tr className="bg-zinc-800">
                         <td className="p-4 sticky left-0 z-10 bg-zinc-800"></td>
                         <td className="p-4 text-center">
-                          <button className="w-full py-3 bg-laser-blue hover:bg-opacity-90 text-white font-semibold rounded-lg transition-colors">
+                          <button className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors">
                             Get Started
                           </button>
                         </td>
                         <td className="p-4 text-center">
-                          <button className="w-full py-3 bg-mint-signal hover:bg-opacity-90 text-white font-semibold rounded-lg transition-colors">
+                          <button className="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg transition-colors">
                             Get Started
                           </button>
                         </td>
                         <td className="p-4 text-center">
-                          <button className="w-full py-3 text-white font-semibold rounded-lg transition-colors bg-mint-signal hover:bg-opacity-90">
+                          <button className="w-full py-3 bg-teal-500 hover:bg-teal-600 text-white font-semibold rounded-lg transition-colors">
                             Contact Sales
                           </button>
                         </td>

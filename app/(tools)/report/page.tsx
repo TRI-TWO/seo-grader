@@ -8,6 +8,7 @@ import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type Scor
 import scoringConfig from "@/lib/scoring-config.json";
 import PaywallBlur from "./PaywallBlur";
 import ScoreBlur from "./ScoreBlur";
+import { createClient } from "@/lib/supabase/client";
 // BrandLogo and HamburgerMenu are now in the layout
 
 // TypeScript declaration for Calendly
@@ -67,6 +68,7 @@ function ReportPageContent() {
   const [showCalendlyModal, setShowCalendlyModal] = useState<boolean>(false);
   const [calendlyScriptLoaded, setCalendlyScriptLoaded] = useState<boolean>(false);
   const calendlyWidgetRef = useRef<HTMLDivElement>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   // Helper function to truncate URL at domain extension
   const truncateUrlAtDomain = (url: string): string => {
@@ -281,6 +283,22 @@ function ReportPageContent() {
     // Small delay to ensure localStorage is available after navigation
     const timer = setTimeout(loadResults, 50);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdmin = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (!error && user && user.email === 'mgr@tri-two.com') {
+          setIsAdmin(true);
+        }
+      } catch (err) {
+        console.error("Error checking admin status:", err);
+      }
+    };
+    checkAdmin();
   }, []);
 
   const parseHTML = (html: string, apiData: any): Omit<AuditData, "seoScore" | "titleScoreRaw" | "titleScore10" | "titleStatus" | "mediaScoreRaw" | "mediaScore10" | "mediaStatus" | "aiScoreRaw" | "aiScore10" | "aiStatus"> => {
@@ -1244,6 +1262,13 @@ function ReportPageContent() {
             <section className="bg-zinc-800 rounded-lg border border-zinc-700 p-6 h-full">
               <h2 className="text-2xl font-bold text-white mb-6">Priority Action Items</h2>
               
+              {/* Admin-only helper text */}
+              {isAdmin && (
+                <p className="text-gray-400 text-sm mb-4">
+                  These actions can be diagnosed, optimized, or prioritized using the tools below.
+                </p>
+              )}
+              
               {/* Only blur the content sections, keep title visible */}
               <PaywallBlur isPaywalled={true}>
                 {/* High Priority (Red Issues) */}
@@ -1291,6 +1316,46 @@ function ReportPageContent() {
                   </div>
                 )}
               </PaywallBlur>
+
+              {/* Admin-only CTA section */}
+              {isAdmin && (
+                <div className="mt-6 pt-6 border-t border-zinc-700">
+                  <p className="text-gray-400 text-sm mb-4">Next: Diagnose or Optimize</p>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={() => {
+                        const encodedUrl = encodeURIComponent(finalUrl);
+                        router.push(`/admin/midnight?url=${encodedUrl}`);
+                      }}
+                      className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition"
+                    >
+                      Run Midnight (Diagnosis)
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Collect all action items
+                        const allActions = [
+                          ...highPriorityItems,
+                          ...mediumPriorityItems,
+                          ...lowPriorityItems
+                        ];
+                        // Format as: "Label: Value on {url}"
+                        const formattedActions = allActions.map(item => 
+                          `${item.label}: ${item.value} on ${finalUrl}`
+                        ).join('\n');
+                        const encodedActions = encodeURIComponent(formattedActions);
+                        router.push(`/admin/burnt?tab=score&actions=${encodedActions}`);
+                      }}
+                      className="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition"
+                    >
+                      Send Actions to Burnt (Prioritization)
+                    </button>
+                  </div>
+                  <p className="text-gray-500 text-xs mt-2">
+                    Burnt will reorder these actions based on impact and effort.
+                  </p>
+                </div>
+              )}
             </section>
           </div>
 

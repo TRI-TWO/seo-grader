@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 // BrandLogo and HamburgerMenu are now in the layout
@@ -11,6 +11,7 @@ type TabType = "score" | "orchestrate";
 
 export default function AdminBurntPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("score");
@@ -30,7 +31,17 @@ export default function AdminBurntPage() {
 
   useEffect(() => {
     checkAdminAccess();
-  }, []);
+    
+    // Pre-populate actions from query parameter
+    const actionsParam = searchParams.get('actions');
+    const tabParam = searchParams.get('tab');
+    if (actionsParam) {
+      setActionsInput(decodeURIComponent(actionsParam));
+    }
+    if (tabParam === 'score') {
+      setActiveTab('score');
+    }
+  }, [searchParams]);
 
   const checkAdminAccess = async () => {
     try {
@@ -243,7 +254,8 @@ export default function AdminBurntPage() {
               </Link>
             </div>
 
-            <h1 className="text-4xl font-bold mb-4">Burnt</h1>
+            <h1 className="text-4xl font-bold mb-2">Burnt</h1>
+            <p className="text-gray-400 text-sm mb-4">Burnt determines what gets done first.</p>
             <p className="text-cool-ash mb-8">
               Prioritize actions into an execution order
             </p>

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 // BrandLogo and HamburgerMenu are now in the layout
@@ -9,6 +9,7 @@ import type { CrimsonAPIResponse } from "@/lib/llms/types";
 
 export default function AdminCrimsonPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [urlInput, setUrlInput] = useState("");
@@ -19,7 +20,17 @@ export default function AdminCrimsonPage() {
 
   useEffect(() => {
     checkAdminAccess();
-  }, []);
+    
+    // Pre-populate URL and goal from query parameters
+    const urlParam = searchParams.get('url');
+    const goalParam = searchParams.get('goal');
+    if (urlParam) {
+      setUrlInput(decodeURIComponent(urlParam));
+    }
+    if (goalParam) {
+      setGoal(decodeURIComponent(goalParam));
+    }
+  }, [searchParams]);
 
   const checkAdminAccess = async () => {
     try {
@@ -132,7 +143,8 @@ export default function AdminCrimsonPage() {
               </Link>
             </div>
 
-            <h1 className="text-4xl font-bold mb-4">Crimson</h1>
+            <h1 className="text-4xl font-bold mb-2">Crimson</h1>
+            <p className="text-gray-400 text-sm mb-2">Crimson improves what the page says based on your goal.</p>
             <p className="text-cool-ash mb-8">
               Edit and optimize page content for clarity, trust, and conversion
             </p>
@@ -256,6 +268,33 @@ export default function AdminCrimsonPage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Recommended Action Items section for Burnt handoff */}
+                {results.crimsonActions.length > 0 && (
+                  <div className="bg-obsidian rounded-lg border border-steel-gray p-6">
+                    <h2 className="text-2xl font-bold mb-4">Recommended Action Items</h2>
+                    <div className="space-y-2 mb-4">
+                      {results.crimsonActions.map((action, idx) => (
+                        <div key={idx} className="text-cool-ash text-sm">
+                          {action.title}: {action.description} (Page: {urlInput})
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        // Format actions as: "Title: Description on {url}"
+                        const formattedActions = results.crimsonActions.map(action => 
+                          `${action.title}: ${action.description} on ${urlInput}`
+                        ).join('\n');
+                        const encodedActions = encodeURIComponent(formattedActions);
+                        router.push(`/admin/burnt?tab=score&actions=${encodedActions}`);
+                      }}
+                      className="px-6 py-3 bg-[#f29e4c] hover:bg-[#e08d3b] text-white font-medium rounded-lg transition"
+                    >
+                      Send Actions to Burnt
+                    </button>
                   </div>
                 )}
               </div>

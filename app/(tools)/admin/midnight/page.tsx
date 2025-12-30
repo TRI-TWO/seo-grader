@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 // BrandLogo and HamburgerMenu are now in the layout
@@ -9,6 +9,7 @@ import type { MidnightAPIResponse, MidnightMode } from "@/lib/llms/types";
 
 export default function AdminMidnightPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [urlInput, setUrlInput] = useState("");
@@ -18,7 +19,13 @@ export default function AdminMidnightPage() {
 
   useEffect(() => {
     checkAdminAccess();
-  }, []);
+    
+    // Pre-populate URL from query parameter
+    const urlParam = searchParams.get('url');
+    if (urlParam) {
+      setUrlInput(decodeURIComponent(urlParam));
+    }
+  }, [searchParams]);
 
   const checkAdminAccess = async () => {
     try {
@@ -130,7 +137,8 @@ export default function AdminMidnightPage() {
               </Link>
             </div>
 
-            <h1 className="text-4xl font-bold mb-4">Midnight</h1>
+            <h1 className="text-4xl font-bold mb-2">Midnight</h1>
+            <p className="text-gray-400 text-sm mb-2">Midnight decides what kind of work should happen next.</p>
             <p className="text-cool-ash mb-8">
               Homepage structure and decision routing
             </p>
@@ -254,7 +262,7 @@ export default function AdminMidnightPage() {
 
                 {results.optionalCrimsonArtifacts && (
                   <div className="bg-obsidian rounded-lg border border-steel-gray p-6">
-                    <h2 className="text-2xl font-bold mb-4">Crimson Results</h2>
+                    <h2 className="text-2xl font-bold mb-4">Crimson Content Optimization Ready</h2>
                     <p className="text-cool-ash mb-4">Content optimization from Crimson:</p>
                     {results.optionalCrimsonArtifacts.contentEdits.length > 0 && (
                       <div className="mb-4">
@@ -268,6 +276,17 @@ export default function AdminMidnightPage() {
                         <div className="text-sm text-cool-ash">{results.optionalCrimsonArtifacts.ctaSuggestions.length} CTAs suggested</div>
                       </div>
                     )}
+                    <button
+                      onClick={() => {
+                        const encodedUrl = encodeURIComponent(urlInput);
+                        const inferredGoal = "Improve homepage clarity and conversion based on structural diagnosis";
+                        const encodedGoal = encodeURIComponent(inferredGoal);
+                        router.push(`/admin/crimson?url=${encodedUrl}&goal=${encodedGoal}`);
+                      }}
+                      className="mt-4 px-6 py-3 bg-[#e4572e] hover:bg-[#d14a23] text-white font-medium rounded-lg transition"
+                    >
+                      Continue to Crimson
+                    </button>
                   </div>
                 )}
               </div>

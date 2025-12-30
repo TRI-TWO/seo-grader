@@ -260,33 +260,25 @@ function AdminMidnightPageContent() {
                   </div>
                 )}
 
-                {results.optionalCrimsonArtifacts && (
+                {results.optionalCrimsonArtifacts ? (
                   <div className="bg-obsidian rounded-lg border border-steel-gray p-6">
-                    <h2 className="text-2xl font-bold mb-4">Crimson Content Optimization Ready</h2>
-                    <p className="text-cool-ash mb-4">Content optimization from Crimson:</p>
-                    {results.optionalCrimsonArtifacts.contentEdits.length > 0 && (
-                      <div className="mb-4">
-                        <div className="font-semibold mb-2">Content Edits:</div>
-                        <div className="text-sm text-cool-ash">{results.optionalCrimsonArtifacts.contentEdits.length} edits suggested</div>
-                      </div>
-                    )}
-                    {results.optionalCrimsonArtifacts.ctaSuggestions.length > 0 && (
-                      <div className="mb-4">
-                        <div className="font-semibold mb-2">CTA Suggestions:</div>
-                        <div className="text-sm text-cool-ash">{results.optionalCrimsonArtifacts.ctaSuggestions.length} CTAs suggested</div>
-                      </div>
-                    )}
+                    <p className="text-cool-ash mb-4">The structure looks solid. Improving page messaging may be the next best step.</p>
                     <button
                       onClick={() => {
                         const encodedUrl = encodeURIComponent(urlInput);
-                        const inferredGoal = "Improve homepage clarity and conversion based on structural diagnosis";
-                        const encodedGoal = encodeURIComponent(inferredGoal);
-                        router.push(`/admin/crimson?url=${encodedUrl}&goal=${encodedGoal}`);
+                        const encodedGoal = encodeURIComponent("Improve page messaging clarity and conversion based on Midnight diagnosis");
+                        router.push(`/admin/crimson/create?url=${encodedUrl}&goal=${encodedGoal}`);
                       }}
-                      className="mt-4 px-6 py-3 bg-[#e4572e] hover:bg-[#d14a23] text-white font-medium rounded-lg transition"
+                      className="w-full text-left px-6 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition"
                     >
-                      Continue to Crimson
+                      <div className="font-semibold text-white mb-1">Refine page messaging</div>
+                      <div className="text-sm text-gray-400">Continue to Crimson content optimization</div>
                     </button>
+                  </div>
+                ) : results.midnightActions.length > 0 && (
+                  <div className="bg-obsidian rounded-lg border border-steel-gray p-6">
+                    <p className="text-cool-ash mb-4">This page may benefit from structural adjustments before rewriting content.</p>
+                    <div className="text-sm text-gray-400">Review the layout guidance above to understand the recommended structural changes.</div>
                   </div>
                 )}
               </div>

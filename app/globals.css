@@ -2,3 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* TRI-TWO Design Tokens */
+:root {
+  --bg-primary: #111317;
+  --bg-secondary: #181b21;
+  --bg-tertiary: #1f2329;
+  --text-primary: #ffffff;
+  --text-secondary: #e0e0e0;
+  --text-muted: #8f93a2;
+  --accent-teal: #00c1a1;
+  --accent-orange: #ff7a1a;
+  --accent-coral: #ff4f5e;
+  --border-primary: #2a2d35;
+}
+

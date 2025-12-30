@@ -1317,19 +1317,34 @@ function ReportPageContent() {
                 )}
               </PaywallBlur>
 
-              {/* Admin-only CTA section */}
+              {/* Admin-only Next Steps Panel */}
               {isAdmin && (
                 <div className="mt-6 pt-6 border-t border-zinc-700">
-                  <p className="text-gray-400 text-sm mb-4">Next: Diagnose or Optimize</p>
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <h3 className="text-2xl font-bold text-white mb-2">What would you like to do next?</h3>
+                  <p className="text-gray-400 text-sm mb-6">
+                    Choose how you want to continue working with these results. You can explore why issues exist, improve specific content, or organize what needs to be done.
+                  </p>
+                  <div className="space-y-4">
                     <button
                       onClick={() => {
                         const encodedUrl = encodeURIComponent(finalUrl);
                         router.push(`/admin/midnight?url=${encodedUrl}`);
                       }}
-                      className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition"
+                      className="w-full text-left px-6 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition"
                     >
-                      Run Midnight (Diagnosis)
+                      <div className="font-semibold text-white mb-1">Explore what's affecting this page</div>
+                      <div className="text-sm text-gray-400">Review structure and flow before making changes</div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        const encodedUrl = encodeURIComponent(finalUrl);
+                        const encodedGoal = encodeURIComponent("Improve clarity, trust, and conversion based on audit findings");
+                        router.push(`/admin/crimson/create?url=${encodedUrl}&goal=${encodedGoal}`);
+                      }}
+                      className="w-full text-left px-6 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition"
+                    >
+                      <div className="font-semibold text-white mb-1">Refine messaging and trust signals</div>
+                      <div className="text-sm text-gray-400">Improve wording, credibility, and conversions</div>
                     </button>
                     <button
                       onClick={() => {
@@ -1346,66 +1361,66 @@ function ReportPageContent() {
                         const encodedActions = encodeURIComponent(formattedActions);
                         router.push(`/admin/burnt?tab=score&actions=${encodedActions}`);
                       }}
-                      className="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition"
+                      className="w-full text-left px-6 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition"
                     >
-                      Send Actions to Burnt (Prioritization)
+                      <div className="font-semibold text-white mb-1">Organize what to do first</div>
+                      <div className="text-sm text-gray-400">Prioritize action items into an execution order</div>
                     </button>
                   </div>
-                  <p className="text-gray-500 text-xs mt-2">
-                    Burnt will reorder these actions based on impact and effort.
-                  </p>
                 </div>
               )}
             </section>
           </div>
 
           {/* Right Column: CTA, Pricing, and Upgrade Button - Dynamically positioned to center with Priority Actions */}
-          <div className="flex flex-col space-y-4 lg:sticky lg:top-6" style={{ alignSelf: 'center' }}>
-            {/* CTA Button */}
-            <div className="bg-zinc-800 rounded-lg border border-zinc-700 p-6">
-              <button 
-                onClick={handleScheduleClick}
-                className="w-full text-white font-bold text-xl px-8 py-4 rounded-lg transition shadow-lg"
-                style={{ backgroundColor: '#16b8a6' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#14a895'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16b8a6'}
-              >
-                Schedule FREE Consultation
-              </button>
-            </div>
-
-            {/* Upgrade Results Button */}
-            <div className="bg-zinc-800 rounded-lg border border-zinc-700 p-6">
-              <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-xl px-8 py-4 rounded-lg transition shadow-lg">
-                $5.99 Upgrade Results
-              </button>
-            </div>
-
-            {/* Pricing Cards */}
-            {/* Base Plan - Full Width */}
-            <div className="bg-red-500 rounded-lg p-6 text-center">
-              <div className="text-3xl font-bold text-white mb-2">$299</div>
-              <div className="text-xl font-semibold text-white mb-2">Base Tier</div>
-              <div className="text-red-100 text-sm">Essential Monthly Local SEO Maintenance</div>
-            </div>
-
-            {/* Pro and Enterprise Plans - Side by Side */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Pro Plan */}
-              <div className="bg-orange-500 rounded-lg p-6 text-center">
-                <div className="text-2xl font-bold text-white mb-2">$499</div>
-                <div className="text-lg font-semibold text-white mb-2">Pro Tier</div>
-                <div className="text-orange-100 text-xs">Growth-Focused SEO for Competitive Markets</div>
+          {!isAdmin && (
+            <div className="flex flex-col space-y-4 lg:sticky lg:top-6" style={{ alignSelf: 'center' }}>
+              {/* CTA Button */}
+              <div className="bg-zinc-800 rounded-lg border border-zinc-700 p-6">
+                <button 
+                  onClick={handleScheduleClick}
+                  className="w-full text-white font-bold text-xl px-8 py-4 rounded-lg transition shadow-lg"
+                  style={{ backgroundColor: '#16b8a6' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#14a895'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16b8a6'}
+                >
+                  Schedule FREE Consultation
+                </button>
               </div>
 
-              {/* Enterprise Plan */}
-              <div className="rounded-lg p-6 text-center" style={{ backgroundColor: '#16b8a6' }}>
-                <div className="text-2xl font-bold text-white mb-2">$699</div>
-                <div className="text-lg font-semibold text-white mb-2">Enterprise Tier</div>
-                <div className="text-xs" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Regional SEO + Multi-Location Dominance</div>
+              {/* Upgrade Results Button */}
+              <div className="bg-zinc-800 rounded-lg border border-zinc-700 p-6">
+                <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-xl px-8 py-4 rounded-lg transition shadow-lg">
+                  $5.99 Upgrade Results
+                </button>
+              </div>
+
+              {/* Pricing Cards */}
+              {/* Base Plan - Full Width */}
+              <div className="bg-red-500 rounded-lg p-6 text-center">
+                <div className="text-3xl font-bold text-white mb-2">$299</div>
+                <div className="text-xl font-semibold text-white mb-2">Base Tier</div>
+                <div className="text-red-100 text-sm">Essential Monthly Local SEO Maintenance</div>
+              </div>
+
+              {/* Pro and Enterprise Plans - Side by Side */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Pro Plan */}
+                <div className="bg-orange-500 rounded-lg p-6 text-center">
+                  <div className="text-2xl font-bold text-white mb-2">$499</div>
+                  <div className="text-lg font-semibold text-white mb-2">Pro Tier</div>
+                  <div className="text-orange-100 text-xs">Growth-Focused SEO for Competitive Markets</div>
+                </div>
+
+                {/* Enterprise Plan */}
+                <div className="rounded-lg p-6 text-center" style={{ backgroundColor: '#16b8a6' }}>
+                  <div className="text-2xl font-bold text-white mb-2">$699</div>
+                  <div className="text-lg font-semibold text-white mb-2">Enterprise Tier</div>
+                  <div className="text-xs" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Regional SEO + Multi-Location Dominance</div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </main>
 

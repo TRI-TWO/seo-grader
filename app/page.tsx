@@ -52,8 +52,9 @@ export default function Home() {
           return;
         }
 
-        // Check if user is mgr@tri-two.com
-        if (user.email === 'mgr@tri-two.com') {
+        // Check role from user metadata (consistent with other admin pages)
+        const role = (user.user_metadata?.role as string) || 'VISITOR';
+        if (role === "ADMIN") {
           setIsAdmin(true);
         } else {
           setIsAdmin(false);

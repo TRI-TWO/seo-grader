@@ -4,13 +4,13 @@ import React, { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
-interface PaywallBlurProps {
+interface ScoreBlurProps {
   children: React.ReactNode;
   isPaywalled?: boolean;
   className?: string;
 }
 
-export default function PaywallBlur({ children, isPaywalled = true, className = "" }: PaywallBlurProps) {
+export default function ScoreBlur({ children, isPaywalled = true, className = "" }: ScoreBlurProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,27 +34,16 @@ export default function PaywallBlur({ children, isPaywalled = true, className = 
   }, []);
 
   const isAuthenticated = !!user;
+  const isAdmin = user && (user.user_metadata?.role as string) === "ADMIN";
   
-  // Debug: Verify component is rendering
-  if (typeof window !== 'undefined' && !loading) {
-    console.log('PaywallBlur rendering, isPaywalled:', isPaywalled, 'isAuthenticated:', isAuthenticated);
-  }
-  
-  // If user is authenticated, bypass paywall
-  if (!isPaywalled || isAuthenticated) {
+  // If user is admin or authenticated, show score without blur (admin always bypasses)
+  if (!isPaywalled || isAdmin || isAuthenticated) {
     return <div className={className}>{children}</div>;
   }
 
   return (
-    <div 
-      className={`relative ${className}`} 
-      style={{ 
-        position: 'relative', 
-        minHeight: '60px',
-        isolation: 'isolate'
-      }}
-    >
-      {/* Blurred content - showing actual results but blurred */}
+    <div className={`relative inline-block ${className}`} style={{ position: 'relative' }}>
+      {/* Blurred content - showing actual score but blurred */}
       <div 
         style={{ 
           filter: 'blur(25px)',
@@ -85,7 +74,7 @@ export default function PaywallBlur({ children, isPaywalled = true, className = 
         }}
       />
       
-      {/* Overlay with "Unlock to see" text bubble */}
+      {/* Overlay with "Unlock to see" text bubble - only as tall as the number */}
       <div 
         style={{ 
           position: 'absolute',
@@ -102,10 +91,10 @@ export default function PaywallBlur({ children, isPaywalled = true, className = 
         <div 
           style={{
             color: 'white',
-            padding: '12px 20px',
+            padding: '8px 16px',
             borderRadius: '8px',
             fontWeight: 600,
-            fontSize: '16px',
+            fontSize: '14px',
             backgroundColor: '#9333ea',
             border: '3px solid #a855f7',
             boxShadow: '0 10px 30px rgba(147, 51, 234, 0.8), 0 0 20px rgba(147, 51, 234, 0.4)',
@@ -119,3 +108,6 @@ export default function PaywallBlur({ children, isPaywalled = true, className = 
     </div>
   );
 }
+
+
+

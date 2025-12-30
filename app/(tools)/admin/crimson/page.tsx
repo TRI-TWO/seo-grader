@@ -4,8 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import BrandLogo from "@/components/BrandLogo";
-import HamburgerMenu from "@/components/HamburgerMenu";
+// BrandLogo and HamburgerMenu are now in the layout
 import type { CrimsonAPIResponse } from "@/lib/llms/types";
 
 export default function AdminCrimsonPage() {
@@ -77,8 +76,24 @@ export default function AdminCrimsonPage() {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-        setError(errorData.error || "Failed to execute Crimson. Please try again.");
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+          setError(errorData.error || "Failed to execute Crimson. Please try again.");
+        } else {
+          const text = await response.text().catch(() => "Unknown error");
+          const preview = text.substring(0, 200);
+          setError(`Error ${response.status}: ${preview}`);
+        }
+        setLoading(false);
+        return;
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text().catch(() => "Invalid response");
+        const preview = text.substring(0, 200);
+        setError(`Invalid response format (expected JSON): ${preview}`);
         setLoading(false);
         return;
       }
@@ -109,28 +124,7 @@ export default function AdminCrimsonPage() {
   }
 
   return (
-    <div className="min-h-screen bg-void-black text-white relative overflow-hidden">
-      <div className="absolute inset-0 opacity-10">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,0.05) 35px, rgba(255,255,255,0.05) 70px)",
-          }}
-        />
-      </div>
-
-      <div className="relative z-10">
-        <header className="flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
-          <div className="flex-shrink-0">
-            <BrandLogo />
-          </div>
-          <div className="flex-shrink-0">
-            <HamburgerMenu />
-          </div>
-        </header>
-
-        <main className="min-h-[calc(100vh-200px)] px-6 py-12">
+    <main className="min-h-[calc(100vh-200px)] px-6 py-12">
           <div className="max-w-4xl mx-auto">
             <div className="mb-6">
               <Link href="/admin" className="text-laser-blue hover:text-light-blue-tint">
@@ -268,8 +262,6 @@ export default function AdminCrimsonPage() {
             )}
           </div>
         </main>
-      </div>
-    </div>
   );
 }
 

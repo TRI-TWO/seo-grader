@@ -8,8 +8,7 @@ import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type Scor
 import scoringConfig from "@/lib/scoring-config.json";
 import PaywallBlur from "./PaywallBlur";
 import ScoreBlur from "./ScoreBlur";
-import BrandLogo from "@/components/BrandLogo";
-import HamburgerMenu from "@/components/HamburgerMenu";
+// BrandLogo and HamburgerMenu are now in the layout
 
 // TypeScript declaration for Calendly
 declare global {
@@ -841,7 +840,7 @@ function ReportPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-900">
+    <>
       {/* Partial Audit Warning Banner */}
       {partialAudit && (
         <div className="bg-yellow-600 border-b border-yellow-700 px-6 py-4">
@@ -857,21 +856,16 @@ function ReportPageContent() {
           </div>
         </div>
       )}
-      {/* Header */}
-      <header className="bg-zinc-900 border-b border-zinc-700 px-6 py-4">
+      {/* Header Section (without BrandLogo/HamburgerMenu - those are in layout) */}
+      <div className="border-b border-zinc-700 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center">
-          {/* Logo - Fully left justified */}
-          <div className="flex-shrink-0">
-            <BrandLogo />
-          </div>
-
           {/* Title and URL */}
           <div className="flex-1 ml-8">
             <h1 className="text-4xl font-bold text-white">Audit Results</h1>
             <p className="text-3xl text-gray-400 mt-1">{truncateUrlAtDomain(finalUrl || "")}</p>
           </div>
 
-          {/* Right side: Score and Menu - Fully right justified */}
+          {/* Right side: Score - Fully right justified */}
           <div className="flex items-center gap-4 ml-auto">
             {/* SEO Score Badge */}
             <div className="flex flex-col items-end gap-2">
@@ -885,14 +879,9 @@ function ReportPageContent() {
                 {auditData.seoScore >= 81 ? "GOOD" : auditData.seoScore >= 61 ? "WARNING" : "ISSUE"}
               </button>
             </div>
-
-            {/* Hamburger Menu - Fully right justified */}
-            <div className="flex-shrink-0">
-              <HamburgerMenu />
-            </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Audit Results - Three Column Layout */}
       <main className="w-full px-6 py-8 space-y-6">
@@ -1397,7 +1386,7 @@ function ReportPageContent() {
           console.error('Error loading Calendly script:', e);
         }}
       />
-    </div>
+    </>
   );
 }
 

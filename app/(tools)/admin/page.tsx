@@ -4,8 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import BrandLogo from "@/components/BrandLogo";
-import HamburgerMenu from "@/components/HamburgerMenu";
+// BrandLogo and HamburgerMenu are now in the layout, but we override background here
 import {
   runAuditToCrimson,
   runAuditToMidnight,
@@ -200,25 +199,54 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-void-black text-white relative overflow-hidden">
-      <div className="absolute inset-0 opacity-10">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,0.05) 35px, rgba(255,255,255,0.05) 70px)",
-          }}
-        />
+      {/* Wave background override for admin dashboard */}
+      <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-void-black"></div>
+        <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 1200 800" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="topoGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#2F80FF" stopOpacity="0.1" />
+              <stop offset="100%" stopColor="#2F80FF" stopOpacity="0.05" />
+            </linearGradient>
+          </defs>
+          <path d="M0,600 Q300,550 600,580 T1200,600" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.15" />
+          <path d="M0,650 Q300,600 600,630 T1200,650" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.12" />
+          <path d="M0,700 Q300,650 600,680 T1200,700" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.1" />
+          <g opacity="0.08">
+            {Array.from({ length: 15 }).map((_, i) => (
+              <line key={`h-${i}`} x1="0" y1={i * 50} x2="1200" y2={i * 50} stroke="#2F80FF" strokeWidth="0.5" />
+            ))}
+            {Array.from({ length: 20 }).map((_, i) => (
+              <line key={`v-${i}`} x1={i * 60} y1="0" x2={i * 60} y2="800" stroke="#2F80FF" strokeWidth="0.5" />
+            ))}
+          </g>
+        </svg>
+        <svg className="absolute inset-0 w-full h-full opacity-30" viewBox="0 0 1200 800" preserveAspectRatio="none">
+          <path d="M100,400 Q400,300 700,350 T1200,400" stroke="#2F80FF" strokeWidth="1.5" fill="none" opacity="0.4" />
+          <path d="M200,500 Q500,450 800,480 T1200,500" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.3" />
+        </svg>
+        <div className="absolute inset-0">
+          {Array.from({ length: 12 }).map((_, i) => {
+            const x = Math.random() * 100;
+            const y = 60 + Math.random() * 40;
+            return (
+              <div
+                key={i}
+                className="absolute rounded-full bg-mint-signal opacity-30"
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  width: '4px',
+                  height: '4px',
+                  boxShadow: '0 0 6px rgba(46, 211, 183, 0.4)',
+                }}
+              />
+            );
+          })}
+        </div>
       </div>
 
       <div className="relative z-10">
-        <header className="flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
-          <div className="flex-shrink-0">
-            <BrandLogo />
-          </div>
-          <div className="flex-shrink-0">
-            <HamburgerMenu />
-          </div>
-        </header>
 
         <main className="min-h-[calc(100vh-200px)] px-6 py-12">
           <div className="max-w-7xl mx-auto">

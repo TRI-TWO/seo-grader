@@ -4,13 +4,13 @@ import React, { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
-interface ScoreBlurProps {
+interface PaywallBlurProps {
   children: React.ReactNode;
   isPaywalled?: boolean;
   className?: string;
 }
 
-export default function ScoreBlur({ children, isPaywalled = true, className = "" }: ScoreBlurProps) {
+export default function PaywallBlur({ children, isPaywalled = true, className = "" }: PaywallBlurProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,15 +34,28 @@ export default function ScoreBlur({ children, isPaywalled = true, className = ""
   }, []);
 
   const isAuthenticated = !!user;
+  const isAdmin = user && (user.user_metadata?.role as string) === "ADMIN";
   
-  // If user is authenticated, show score without blur
-  if (!isPaywalled || isAuthenticated) {
+  // Debug: Verify component is rendering
+  if (typeof window !== 'undefined' && !loading) {
+    console.log('PaywallBlur rendering, isPaywalled:', isPaywalled, 'isAuthenticated:', isAuthenticated, 'isAdmin:', isAdmin);
+  }
+  
+  // If user is admin or authenticated, bypass paywall (admin always bypasses)
+  if (!isPaywalled || isAdmin || isAuthenticated) {
     return <div className={className}>{children}</div>;
   }
 
   return (
-    <div className={`relative inline-block ${className}`} style={{ position: 'relative' }}>
-      {/* Blurred content - showing actual score but blurred */}
+    <div 
+      className={`relative ${className}`} 
+      style={{ 
+        position: 'relative', 
+        minHeight: '60px',
+        isolation: 'isolate'
+      }}
+    >
+      {/* Blurred content - showing actual results but blurred */}
       <div 
         style={{ 
           filter: 'blur(25px)',
@@ -73,7 +86,7 @@ export default function ScoreBlur({ children, isPaywalled = true, className = ""
         }}
       />
       
-      {/* Overlay with "Unlock to see" text bubble - only as tall as the number */}
+      {/* Overlay with "Unlock to see" text bubble */}
       <div 
         style={{ 
           position: 'absolute',
@@ -90,10 +103,10 @@ export default function ScoreBlur({ children, isPaywalled = true, className = ""
         <div 
           style={{
             color: 'white',
-            padding: '8px 16px',
+            padding: '12px 20px',
             borderRadius: '8px',
             fontWeight: 600,
-            fontSize: '14px',
+            fontSize: '16px',
             backgroundColor: '#9333ea',
             border: '3px solid #a855f7',
             boxShadow: '0 10px 30px rgba(147, 51, 234, 0.8), 0 0 20px rgba(147, 51, 234, 0.4)',
@@ -107,6 +120,3 @@ export default function ScoreBlur({ children, isPaywalled = true, className = ""
     </div>
   );
 }
-
-
-

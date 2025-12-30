@@ -103,27 +103,17 @@ export default function HamburgerMenu() {
               </Link>
 
               {/* Pricing */}
-              {isHomePage ? (
-                <button
-                  onClick={() => {
-                    handleLinkClick();
-                    // Scroll to pricing section or handle pricing tab
-                    const event = new CustomEvent('navigateToPricing');
-                    window.dispatchEvent(event);
-                  }}
-                  className="block w-full text-left px-4 py-2 text-base font-medium text-gray-300 hover:text-white hover:bg-zinc-700 transition"
-                >
-                  Pricing
-                </button>
-              ) : (
-                <Link
-                  href="/#pricing"
-                  onClick={handleLinkClick}
-                  className="block px-4 py-2 text-base font-medium text-gray-300 hover:text-white hover:bg-zinc-700 transition"
-                >
-                  Pricing
-                </Link>
-              )}
+              <Link
+                href="/pricing"
+                onClick={handleLinkClick}
+                className={`block px-4 py-2 text-base font-medium transition ${
+                  pathname === "/pricing"
+                    ? "text-white bg-zinc-700"
+                    : "text-gray-300 hover:text-white hover:bg-zinc-700"
+                }`}
+              >
+                Pricing
+              </Link>
 
               {/* About */}
               <Link

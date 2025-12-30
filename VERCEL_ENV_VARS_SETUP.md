@@ -2,11 +2,17 @@
 
 ## Required Environment Variables
 
-Your application needs the following Supabase environment variables set in Vercel:
+Your application needs the following environment variables set in Vercel:
 
 ### Client-Side Variables (Required for browser)
 - `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anonymous/public key
+
+### Server-Side Variables (Required for LLM features)
+- `OPENAI_API_KEY` - Your OpenAI API key (required for Crimson, Midnight, and Burnt tools)
+  - Get from: https://platform.openai.com/api-keys
+  - ⚠️ **Keep this secret!** Never expose this in client-side code
+  - Required for: `/api/llm/crimson`, `/api/llm/midnight`, `/api/llm/burnt/*`
 
 ### Server-Side Variables (Optional, for admin operations)
 - `SUPABASE_URL` - Your Supabase project URL (same as NEXT_PUBLIC_SUPABASE_URL)
@@ -62,7 +68,14 @@ Your application needs the following Supabase environment variables set in Verce
    - **Environment:** Select all (Production, Preview, Development)
    - Click **Save**
 
-   **Variable 4 (Database connection):**
+   **Variable 4 (OpenAI API Key - Required for LLM tools):**
+   - **Key:** `OPENAI_API_KEY`
+   - **Value:** `[Your OpenAI API key from https://platform.openai.com/api-keys]`
+   - **Environment:** Select all (Production, Preview, Development)
+   - ⚠️ **Important:** This is required for Crimson, Midnight, and Burnt tools to work
+   - Click **Save**
+
+   **Variable 5 (Database connection):**
    - **Key:** `DATABASE_URL`
    - **Value:** `postgresql://postgres:WM335atxMD88@db.gvemjgcqehmdcltzzkef.supabase.co:5432/postgres?sslmode=require`
    - **Environment:** Select all (Production, Preview, Development)
@@ -89,6 +102,7 @@ vercel link
 # Set environment variables
 vercel env add NEXT_PUBLIC_SUPABASE_URL
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY
+vercel env add OPENAI_API_KEY
 vercel env add SUPABASE_SERVICE_ROLE_KEY
 vercel env add DATABASE_URL
 
@@ -132,11 +146,14 @@ vercel env pull .env.local
 ## Quick Checklist
 
 - [ ] Got anon key from Supabase dashboard (Settings → API)
+- [ ] Got OpenAI API key from https://platform.openai.com/api-keys
 - [ ] Added `NEXT_PUBLIC_SUPABASE_URL` in Vercel
 - [ ] Added `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel
+- [ ] Added `OPENAI_API_KEY` in Vercel (required for LLM tools)
 - [ ] Set variables for all environments (Production, Preview, Development)
 - [ ] Redeployed the application
 - [ ] Verified error is gone in browser console
+- [ ] Tested Crimson, Midnight, or Burnt tools to verify OpenAI integration
 
 
 

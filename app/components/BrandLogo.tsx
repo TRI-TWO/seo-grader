@@ -19,7 +19,7 @@ export default function BrandLogo({
 }: BrandLogoProps) {
   // For now, we only have the lockup version
   // The mark variant would be tri-two-logo-nw.svg (no wordmark)
-  const logoSrc = variant === 'mark' ? '/brand/tri-two-logo-nw.svg' : '/brand/tri-two-logo.svg';
+  const logoSrc = variant === 'mark' ? '/tri-two-logo-nw.svg' : '/tri-two-logo.svg';
   const logoHeight = variant === 'mark' ? Math.round(size * 0.83) : Math.round(size * 1.18);
 
   return (

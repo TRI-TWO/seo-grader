@@ -30,7 +30,13 @@ export default function LoginPage() {
         setError(authError.message || "Invalid email or password");
         setLoading(false);
       } else if (data.user) {
-        router.push("/");
+        // Check user role and redirect accordingly
+        const role = (data.user.user_metadata?.role as string) || 'VISITOR';
+        if (role === "ADMIN") {
+          router.push("/admin");
+        } else {
+          router.push("/");
+        }
         router.refresh();
       } else {
         setError("An error occurred. Please try again.");

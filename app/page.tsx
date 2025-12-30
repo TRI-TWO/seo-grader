@@ -261,9 +261,9 @@ export default function Home() {
             {/* Error State */}
             {error && !loading && (
               <div className="mt-4 max-w-2xl w-full">
-                <div className="bg-red-600 border border-red-700 rounded-lg px-6 py-4">
+                <div className="bg-critical-red border border-critical-red rounded-lg px-6 py-4">
                   <div className="text-white font-semibold mb-2">Error</div>
-                  <div className="text-red-100">{error}</div>
+                  <div className="text-white opacity-90">{error}</div>
                 </div>
               </div>
             )}
@@ -330,7 +330,7 @@ export default function Home() {
               {/* Tier Cards Section */}
               <div className="grid md:grid-cols-3 gap-6">
                 {/* Base Plan */}
-                <div className="bg-red-500 rounded-lg p-8 flex flex-col">
+                <div className="bg-laser-blue rounded-lg p-8 flex flex-col">
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$299</div>
                     <div className="text-xl font-semibold text-white mb-2">Base Tier</div>
@@ -386,13 +386,13 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-red-500 font-semibold rounded-lg transition-colors">
+                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-laser-blue font-semibold rounded-lg transition-colors">
                     Get Started
                   </button>
                 </div>
 
                 {/* Pro Plan */}
-                <div className="bg-orange-500 rounded-lg p-8 flex flex-col">
+                <div className="bg-mint-signal rounded-lg p-8 flex flex-col">
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$499</div>
                     <div className="text-xl font-semibold text-white mb-2">Pro Tier</div>
@@ -448,7 +448,7 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-orange-500 font-semibold rounded-lg transition-colors">
+                  <button className="w-full py-3 bg-white hover:bg-gray-100 text-mint-signal font-semibold rounded-lg transition-colors">
                     Get Started
                   </button>
                 </div>
@@ -527,10 +527,10 @@ export default function Home() {
                   <table className="w-full border-collapse">
                     <thead>
                       <tr>
-                        <th className="bg-purple-600 text-left p-4 text-white font-semibold sticky left-0 z-10">Feature</th>
-                        <th className="bg-purple-600 text-center p-4 text-white font-semibold min-w-[180px]">Base<br />$299</th>
-                        <th className="bg-purple-600 text-center p-4 text-white font-semibold min-w-[180px]">Pro<br />$499</th>
-                        <th className="bg-purple-600 text-center p-4 text-white font-semibold min-w-[180px]">Enterprise<br />$699</th>
+                      <th className="bg-steel-gray text-left p-4 text-white font-semibold sticky left-0 z-10">Feature</th>
+                      <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Base<br />$299</th>
+                      <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Pro<br />$499</th>
+                      <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Enterprise<br />$699</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -671,12 +671,12 @@ export default function Home() {
                       <tr className="bg-zinc-800">
                         <td className="p-4 sticky left-0 z-10 bg-zinc-800"></td>
                         <td className="p-4 text-center">
-                          <button className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors">
+                          <button className="w-full py-3 bg-laser-blue hover:bg-opacity-90 text-white font-semibold rounded-lg transition-colors">
                             Get Started
                           </button>
                         </td>
                         <td className="p-4 text-center">
-                          <button className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors">
+                          <button className="w-full py-3 bg-mint-signal hover:bg-opacity-90 text-white font-semibold rounded-lg transition-colors">
                             Get Started
                           </button>
                         </td>

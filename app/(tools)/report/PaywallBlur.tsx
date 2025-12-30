@@ -34,7 +34,7 @@ export default function PaywallBlur({ children, isPaywalled = true, className = 
   }, []);
 
   const isAuthenticated = !!user;
-  const isAdmin = user && (user.user_metadata?.role as string) === "ADMIN";
+  const isAdmin = user && user.email === 'mgr@tri-two.com';
   
   // Debug: Verify component is rendering
   if (typeof window !== 'undefined' && !loading) {

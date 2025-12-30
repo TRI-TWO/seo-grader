@@ -42,8 +42,8 @@ export default function AdminBurntPage() {
         return;
       }
 
-      const role = (user.user_metadata?.role as string) || 'VISITOR';
-      if (role !== "ADMIN") {
+      // Check if user is admin by email
+      if (user.email !== 'mgr@tri-two.com') {
         router.push("/");
         return;
       }

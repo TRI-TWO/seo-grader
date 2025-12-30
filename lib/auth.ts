@@ -73,32 +73,19 @@ export async function requireAuth(): Promise<{ user: User; role: UserRole } | nu
 
 /**
  * Require admin role for API routes
- * Checks both Supabase user metadata and Prisma User table for ADMIN role
+ * Checks if user email is mgr@tri-two.com
  * Returns the user if admin, or null if not
  */
 export async function requireAdmin(): Promise<User | null> {
-  const authResult = await requireAuth()
+  const user = await getCurrentUser()
   
-  if (!authResult) {
+  if (!user) {
     return null
   }
   
-  // Check Supabase user metadata first
-  if (authResult.role === 'ADMIN') {
-    // Also verify in Prisma User table
-    try {
-      const prismaUser = await prisma.user.findUnique({
-        where: { email: authResult.user.email || '' },
-      })
-      
-      if (prismaUser && prismaUser.role === 'ADMIN') {
-        return authResult.user
-      }
-    } catch (error) {
-      console.error('Error checking Prisma user:', error)
-      // Fallback to Supabase metadata if Prisma check fails
-      return authResult.user
-    }
+  // Check if user is admin by email
+  if (user.email === 'mgr@tri-two.com') {
+    return user
   }
   
   return null

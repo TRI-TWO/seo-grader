@@ -2,9 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-// BrandLogo and HamburgerMenu are now in the layout, but we override background here
 import {
   runAuditToCrimson,
   runAuditToMidnight,
@@ -16,12 +14,40 @@ import {
   runBurntOrchestrate,
 } from "@/lib/adminFlows";
 
-type FlowAction = {
-  id: string;
-  label: string;
-  type: 'standalone' | 'chain';
-  handler: () => void;
-};
+const tiles = [
+  {
+    id: 'audit',
+    label: 'Audit',
+    subtitle: 'SEO Scorer',
+    color: '#f5c451',
+    path: '/admin/audit',
+    flows: ['audit-to-crimson', 'audit-to-midnight', 'audit-to-burnt'],
+  },
+  {
+    id: 'crimson',
+    label: 'Crimson',
+    subtitle: 'Content Engine',
+    color: '#e4572e',
+    path: '/admin/crimson',
+    flows: ['crimson-to-midnight', 'crimson-to-burnt'],
+  },
+  {
+    id: 'midnight',
+    label: 'Midnight',
+    subtitle: 'Decision Engine',
+    color: '#7bd389',
+    path: '/admin/midnight',
+    flows: ['midnight-to-crimson', 'midnight-to-burnt'],
+  },
+  {
+    id: 'burnt',
+    label: 'Burnt',
+    subtitle: 'Prioritization',
+    color: '#f29e4c',
+    path: '/admin/burnt',
+    flows: ['burnt-orchestrate'],
+  },
+];
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -52,9 +78,8 @@ export default function AdminDashboard() {
         return;
       }
 
-      // Check role from user metadata
-      const role = (user.user_metadata?.role as string) || 'VISITOR';
-      if (role !== "ADMIN") {
+      // Check if user is admin by email
+      if (user.email !== 'mgr@tri-two.com') {
         router.push("/");
         return;
       }
@@ -68,8 +93,20 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleStandalone = (path: string) => {
-    router.push(path);
+  const handleTileClick = (path: string, e: React.MouseEvent) => {
+    // Primary action: navigate to tool
+    if (e.button === 0 || e.type === 'click') {
+      router.push(path);
+    }
+  };
+
+  const handleTileRightClick = (tile: typeof tiles[0], e: React.MouseEvent) => {
+    e.preventDefault();
+    // Right-click opens flow selector if tile has flows
+    if (tile.flows.length > 0) {
+      // For now, open first flow. Could show a menu to select which flow
+      openFlowModal(tile.flows[0]);
+    }
   };
 
   const handleChainFlow = async (flowId: string) => {
@@ -147,7 +184,6 @@ export default function AdminDashboard() {
       }
 
       setFlowResults(results);
-      // Optionally redirect to appropriate page or show results inline
     } catch (err: any) {
       setFlowError(err.message || "An error occurred. Please try again.");
     } finally {
@@ -184,10 +220,10 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-void-black text-white flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(to bottom, #0b0f1a, #05070d)' }}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: '#2F80FF' }}></div>
-          <p>Loading...</p>
+          <p className="text-white">Loading...</p>
         </div>
       </div>
     );
@@ -198,13 +234,12 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-void-black text-white relative overflow-hidden">
-      {/* Wave background override for admin dashboard */}
-      <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-void-black"></div>
-        <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 1200 800" preserveAspectRatio="none">
+    <div className="min-h-screen text-white relative overflow-hidden" style={{ background: 'linear-gradient(to bottom, #0b0f1a, #05070d)' }}>
+      {/* Wave overlay */}
+      <div className="absolute inset-0 opacity-20">
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 800" preserveAspectRatio="none">
           <defs>
-            <linearGradient id="topoGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <linearGradient id="adminTopoGradient" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="#2F80FF" stopOpacity="0.1" />
               <stop offset="100%" stopColor="#2F80FF" stopOpacity="0.05" />
             </linearGradient>
@@ -247,136 +282,39 @@ export default function AdminDashboard() {
       </div>
 
       <div className="relative z-10">
-
-        <main className="min-h-[calc(100vh-200px)] px-6 py-12">
-          <div className="max-w-7xl mx-auto">
-            <h1 className="text-4xl md:text-5xl font-bold mb-8 text-center">
-              Admin Dashboard
+        <main className="min-h-[calc(100vh-200px)] flex items-center justify-center px-6 py-12">
+          <div className="w-full max-w-6xl">
+            {/* Title */}
+            <h1 className="text-4xl md:text-5xl font-bold mb-12 text-center text-white">
+              ADMIN PAGE
             </h1>
-            <p className="text-xl text-cool-ash text-center mb-12">
-              Unified LLM SEO Decision System
-            </p>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* Card 1: Run Audit */}
-              <div className="bg-obsidian rounded-lg border border-steel-gray p-6 hover:border-teal-500 transition-colors">
-                <div className="text-2xl font-bold mb-3" style={{ color: '#2F80FF' }}>
-                  Run Audit
+            {/* 4 Tiles - Centered */}
+            <div className="flex flex-wrap justify-center gap-8">
+              {tiles.map((tile) => (
+                <div
+                  key={tile.id}
+                  onClick={(e) => handleTileClick(tile.path, e)}
+                  onContextMenu={(e) => handleTileRightClick(tile, e)}
+                  className="cursor-pointer rounded-lg p-8 min-w-[200px] flex flex-col items-center justify-center transition-transform hover:scale-105"
+                  style={{
+                    backgroundColor: tile.color,
+                    boxShadow: `0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)`,
+                  }}
+                >
+                  <div className="text-3xl font-bold text-white mb-2">
+                    {tile.label}
+                  </div>
+                  <div className="text-lg text-white opacity-90">
+                    {tile.subtitle}
+                  </div>
+                  {tile.flows.length > 0 && (
+                    <div className="mt-2 text-xs text-white opacity-70">
+                      Right-click for flows
+                    </div>
+                  )}
                 </div>
-                <p className="text-cool-ash mb-4 text-sm">
-                  Baseline diagnostics and scoring using Peach audit engine
-                </p>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => handleStandalone('/admin/audit')}
-                    className="w-full px-4 py-2 bg-[#2F80FF] hover:bg-[#2566cc] text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Run Audit (standalone)
-                  </button>
-                  <button
-                    onClick={() => openFlowModal('audit-to-crimson')}
-                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Run Audit → Crimson
-                  </button>
-                  <button
-                    onClick={() => openFlowModal('audit-to-midnight')}
-                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Run Audit → Midnight
-                  </button>
-                  <button
-                    onClick={() => openFlowModal('audit-to-burnt')}
-                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Run Audit → Burnt
-                  </button>
-                </div>
-              </div>
-
-              {/* Card 2: Crimson */}
-              <div className="bg-obsidian rounded-lg border border-steel-gray p-6 hover:border-teal-500 transition-colors">
-                <div className="text-2xl font-bold mb-3" style={{ color: '#2F80FF' }}>
-                  Crimson
-                </div>
-                <p className="text-cool-ash mb-4 text-sm">
-                  Content creation and editing engine
-                </p>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => handleStandalone('/admin/crimson')}
-                    className="w-full px-4 py-2 bg-[#2F80FF] hover:bg-[#2566cc] text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Launch Crimson (standalone)
-                  </button>
-                  <button
-                    onClick={() => openFlowModal('crimson-to-midnight')}
-                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Crimson → Midnight
-                  </button>
-                  <button
-                    onClick={() => openFlowModal('crimson-to-burnt')}
-                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Crimson → Burnt
-                  </button>
-                </div>
-              </div>
-
-              {/* Card 3: Midnight */}
-              <div className="bg-obsidian rounded-lg border border-steel-gray p-6 hover:border-teal-500 transition-colors">
-                <div className="text-2xl font-bold mb-3" style={{ color: '#2F80FF' }}>
-                  Midnight
-                </div>
-                <p className="text-cool-ash mb-4 text-sm">
-                  Homepage, structure, and optimization decision engine
-                </p>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => handleStandalone('/admin/midnight')}
-                    className="w-full px-4 py-2 bg-[#2F80FF] hover:bg-[#2566cc] text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Launch Midnight (standalone)
-                  </button>
-                  <button
-                    onClick={() => openFlowModal('midnight-to-crimson')}
-                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Midnight → Crimson
-                  </button>
-                  <button
-                    onClick={() => openFlowModal('midnight-to-burnt')}
-                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Midnight → Burnt
-                  </button>
-                </div>
-              </div>
-
-              {/* Card 4: Burnt */}
-              <div className="bg-obsidian rounded-lg border border-steel-gray p-6 hover:border-teal-500 transition-colors">
-                <div className="text-2xl font-bold mb-3" style={{ color: '#2F80FF' }}>
-                  Burnt
-                </div>
-                <p className="text-cool-ash mb-4 text-sm">
-                  System-level synthesis and optimization engine
-                </p>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => handleStandalone('/admin/burnt')}
-                    className="w-full px-4 py-2 bg-[#2F80FF] hover:bg-[#2566cc] text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Launch Burnt (standalone)
-                  </button>
-                  <button
-                    onClick={() => openFlowModal('burnt-orchestrate')}
-                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Burnt (orchestrate Audit → Crimson → Midnight)
-                  </button>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </main>

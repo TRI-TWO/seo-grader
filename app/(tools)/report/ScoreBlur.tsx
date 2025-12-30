@@ -34,7 +34,7 @@ export default function ScoreBlur({ children, isPaywalled = true, className = ""
   }, []);
 
   const isAuthenticated = !!user;
-  const isAdmin = user && (user.user_metadata?.role as string) === "ADMIN";
+  const isAdmin = user && user.email === 'mgr@tri-two.com';
   
   // If user is admin or authenticated, show score without blur (admin always bypasses)
   if (!isPaywalled || isAdmin || isAuthenticated) {

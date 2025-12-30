@@ -30,12 +30,11 @@ export default function LoginPage() {
         setError(authError.message || "Invalid email or password");
         setLoading(false);
       } else if (data.user) {
-        // Check user role and redirect accordingly
-        const role = (data.user.user_metadata?.role as string) || 'VISITOR';
-        if (role === "ADMIN") {
-          router.push("/admin");
+        // Check user email and redirect accordingly
+        if (data.user.email === 'mgr@tri-two.com') {
+          router.replace('/admin');
         } else {
-          router.push("/");
+          router.replace('/');
         }
         router.refresh();
       } else {

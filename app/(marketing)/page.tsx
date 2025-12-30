@@ -23,9 +23,8 @@ export default function Home() {
           return;
         }
 
-        // Check role from user metadata (consistent with other admin pages)
-        const role = (user.user_metadata?.role as string) || 'VISITOR';
-        if (role === "ADMIN") {
+        // Check if user is admin by email
+        if (user.email === 'mgr@tri-two.com') {
           // Redirect admin users to /admin instead of showing AdminLauncher
           router.push("/admin");
           return;
@@ -154,7 +153,7 @@ export default function Home() {
         <div className="flex flex-col gap-6 items-center max-w-4xl px-6">
           {/* Main Heading */}
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-center uppercase" style={{ fontFamily: 'system-ui, sans-serif' }}>
-            EVALUATE SYSTEMS, NOT GUESSES
+            CLARITY. CONFIDENCE. CONTROL.
           </h1>
 
           {/* Subheading */}

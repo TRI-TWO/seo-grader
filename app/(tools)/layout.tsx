@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import BrandLogo from "@/components/BrandLogo";
-import HamburgerMenu from "@/components/HamburgerMenu";
+import BrandLogo from "@/app/components/BrandLogo";
+import HamburgerMenu from "@/app/components/HamburgerMenu";
 
 export default function ToolsLayout({
   children,

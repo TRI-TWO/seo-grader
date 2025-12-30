@@ -4,8 +4,8 @@ import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import BrandLogo from "@/components/BrandLogo";
-import HamburgerMenu from "@/components/HamburgerMenu";
+import BrandLogo from "@/app/components/BrandLogo";
+import HamburgerMenu from "@/app/components/HamburgerMenu";
 
 export default function SetNewPasswordPage() {
   const router = useRouter();

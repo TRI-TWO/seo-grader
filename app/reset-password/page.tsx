@@ -3,8 +3,8 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import BrandLogo from "@/components/BrandLogo";
-import HamburgerMenu from "@/components/HamburgerMenu";
+import BrandLogo from "@/app/components/BrandLogo";
+import HamburgerMenu from "@/app/components/HamburgerMenu";
 
 export default function ResetPasswordPage() {
   const router = useRouter();

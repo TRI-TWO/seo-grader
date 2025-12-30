@@ -6,7 +6,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import BrandLogo from "@/components/BrandLogo";
 import HamburgerMenu from "@/components/HamburgerMenu";
-import AdminLauncher from "@/components/AdminLauncher";
 
 type TabType = "home" | "pricing" | "about";
 
@@ -40,7 +39,7 @@ export default function Home() {
     return () => window.removeEventListener('navigateToPricing', handleNavigateToPricing);
   }, []);
 
-  // Check if user is admin
+  // Check if user is admin and redirect to /admin
   useEffect(() => {
     const checkAdmin = async () => {
       try {
@@ -55,7 +54,9 @@ export default function Home() {
         // Check role from user metadata (consistent with other admin pages)
         const role = (user.user_metadata?.role as string) || 'VISITOR';
         if (role === "ADMIN") {
-          setIsAdmin(true);
+          // Redirect admin users to /admin instead of showing AdminLauncher
+          router.push("/admin");
+          return;
         } else {
           setIsAdmin(false);
         }
@@ -66,7 +67,7 @@ export default function Home() {
     };
 
     checkAdmin();
-  }, []);
+  }, [router]);
 
   const handleUrlSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>) => {
     if (e) {
@@ -171,11 +172,6 @@ export default function Home() {
         </div>
       </div>
     );
-  }
-
-  // Show AdminLauncher for admin users
-  if (isAdmin) {
-    return <AdminLauncher />;
   }
 
   // Show free audit hero for non-admin users

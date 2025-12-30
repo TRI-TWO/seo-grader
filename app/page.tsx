@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Logo from "@/components/Logo";
+import { createClient } from "@/lib/supabase/client";
+import BrandLogo from "@/components/BrandLogo";
 import HamburgerMenu from "@/components/HamburgerMenu";
+import AdminLauncher from "@/components/AdminLauncher";
 
 type TabType = "home" | "pricing" | "about";
 
@@ -14,6 +16,7 @@ export default function Home() {
   const [urlInput, setUrlInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   // Handle browser back button for pricing tab
   useEffect(() => {
@@ -35,6 +38,33 @@ export default function Home() {
 
     window.addEventListener('navigateToPricing', handleNavigateToPricing);
     return () => window.removeEventListener('navigateToPricing', handleNavigateToPricing);
+  }, []);
+
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdmin = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user }, error } = await supabase.auth.getUser();
+        
+        if (error || !user) {
+          setIsAdmin(false);
+          return;
+        }
+
+        // Check if user is mgr@tri-two.com
+        if (user.email === 'mgr@tri-two.com') {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (err) {
+        console.error("Error checking admin status:", err);
+        setIsAdmin(false);
+      }
+    };
+
+    checkAdmin();
   }, []);
 
   const handleUrlSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>) => {
@@ -130,6 +160,24 @@ export default function Home() {
     }
   };
 
+  // Show loading state while checking admin status
+  if (isAdmin === null) {
+    return (
+      <div className="min-h-screen bg-void-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4 border-laser-blue"></div>
+          <p className="text-cool-ash">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show AdminLauncher for admin users
+  if (isAdmin) {
+    return <AdminLauncher />;
+  }
+
+  // Show free audit hero for non-admin users
   return (
     <div className="min-h-screen bg-void-black text-white relative overflow-hidden">
       {/* Abstract data landscape background */}
@@ -194,7 +242,7 @@ export default function Home() {
           <div className="flex items-start justify-between">
             {/* Logo - Fully left justified */}
             <div className="flex-shrink-0">
-              <Logo />
+              <BrandLogo />
             </div>
 
             {/* Hamburger Menu - Right justified */}

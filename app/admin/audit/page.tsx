@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import Logo from "@/components/Logo";
+import BrandLogo from "@/components/BrandLogo";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 export default function AdminAuditPage() {
@@ -116,7 +116,7 @@ export default function AdminAuditPage() {
       <div className="relative z-10">
         <header className="flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
           <div className="flex-shrink-0">
-            <Logo />
+            <BrandLogo />
           </div>
           <div className="flex-shrink-0">
             <HamburgerMenu />

@@ -8,7 +8,7 @@ import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type Scor
 import scoringConfig from "@/lib/scoring-config.json";
 import PaywallBlur from "./PaywallBlur";
 import ScoreBlur from "./ScoreBlur";
-import Logo from "@/components/Logo";
+import BrandLogo from "@/components/BrandLogo";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 // TypeScript declaration for Calendly
@@ -862,7 +862,7 @@ function ReportPageContent() {
         <div className="max-w-7xl mx-auto flex items-center">
           {/* Logo - Fully left justified */}
           <div className="flex-shrink-0">
-            <Logo />
+            <BrandLogo />
           </div>
 
           {/* Title and URL */}

@@ -334,8 +334,8 @@ export default function Home() {
                   <div className="mb-6">
                     <div className="text-3xl font-bold mb-2">$299</div>
                     <div className="text-xl font-semibold text-white mb-2">Base Tier</div>
-                    <div className="text-lg font-medium text-red-100 mb-3">Essential Monthly Local SEO Maintenance</div>
-                    <p className="text-red-100 text-sm leading-relaxed">
+                    <div className="text-lg font-medium text-light-blue-tint mb-3">Essential Monthly Local SEO Maintenance</div>
+                    <p className="text-light-blue-tint text-sm leading-relaxed">
                       Designed for contractors who need consistent visibility without heavy content or link work.
                     </p>
                   </div>

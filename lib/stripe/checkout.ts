@@ -14,8 +14,10 @@ export interface CreateCheckoutSessionParams {
 export async function createUnlockCheckoutSession(
   params: CreateCheckoutSessionParams
 ): Promise<Stripe.Checkout.Session> {
-  if (!STRIPE_UNLOCK_PRICE_ID) {
-    throw new Error('STRIPE_UNLOCK_PRICE_ID is not set in environment variables');
+  // Check at runtime, not module load time
+  const priceId = process.env.STRIPE_UNLOCK_PRICE_ID || STRIPE_UNLOCK_PRICE_ID;
+  if (!priceId) {
+    throw new Error('STRIPE_UNLOCK_PRICE_ID is not set in environment variables. Please set it in Vercel environment variables.');
   }
 
   const session = await stripe.checkout.sessions.create({
@@ -23,7 +25,7 @@ export async function createUnlockCheckoutSession(
     payment_method_types: ['card'],
     line_items: [
       {
-        price: STRIPE_UNLOCK_PRICE_ID,
+        price: priceId,
         quantity: 1,
       },
     ],

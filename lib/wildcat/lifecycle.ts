@@ -90,12 +90,11 @@ export async function convertLeadToClient(
     },
   });
 
-  // Update lead status and link to client
+  // Update lead status (client already has leadId set)
   await prisma.lead.update({
     where: { id: leadId },
     data: {
       status: LeadStatus.SIGNED,
-      clientId: client.id,
     },
   });
 

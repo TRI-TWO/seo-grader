@@ -1,4 +1,5 @@
 import { stripe, STRIPE_UNLOCK_PRICE_ID } from './client';
+import type Stripe from 'stripe';
 
 export interface CreateCheckoutSessionParams {
   email: string;

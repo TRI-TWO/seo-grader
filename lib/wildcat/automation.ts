@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { LeadStatus, LeadSource } from '@prisma/client';
-import { createLead, updateLead, getLeadByEmail, transitionLeadStatus } from './leads';
+import { createLead, updateLead, getLeadByEmail, getLeadById, transitionLeadStatus } from './leads';
 import { convertLeadToClient } from './lifecycle';
 import { instantiateTimeline } from '@/lib/smokey/scheduler';
 import { PlanTier } from '@prisma/client';

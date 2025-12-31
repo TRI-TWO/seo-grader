@@ -40,6 +40,11 @@ export async function handleMeetingScheduled(params: MeetingScheduledParams) {
     await transitionLeadStatus(lead.id, LeadStatus.MEETING_SCHEDULED);
   }
 
+  // Find client if lead has been converted
+  const client = await prisma.client.findUnique({
+    where: { leadId: lead.id },
+  });
+
   // Create or update meeting record
   const existingMeeting = await prisma.meeting.findUnique({
     where: { calendlyEventId: params.calendlyEventId },
@@ -54,7 +59,7 @@ export async function handleMeetingScheduled(params: MeetingScheduledParams) {
         status: 'scheduled',
         meetingType: params.meetingType || 'DISCOVERY',
         meetingSource: 'CALENDLY',
-        clientId: lead.clientId || undefined,
+        clientId: client?.id || undefined,
       },
     });
   } else {
@@ -66,7 +71,7 @@ export async function handleMeetingScheduled(params: MeetingScheduledParams) {
         status: 'scheduled',
         meetingType: params.meetingType || 'DISCOVERY',
         meetingSource: 'CALENDLY',
-        clientId: lead.clientId || undefined,
+        clientId: client?.id || undefined,
       },
     });
   }

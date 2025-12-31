@@ -21,23 +21,29 @@ export async function handleMeetingScheduled(params: MeetingScheduledParams) {
 
   if (lead) {
     // Update existing lead
-    lead = await updateLead({
+    const updatedLead = await updateLead({
       leadId: lead.id,
       name: params.name || lead.name || undefined,
       companyName: params.companyName || lead.companyName || undefined,
       canonicalUrl: params.canonicalUrl || lead.canonicalUrl || undefined,
       status: LeadStatus.MEETING_SCHEDULED,
     });
+    lead = updatedLead;
   } else {
     // Create new lead
-    lead = await createLead({
+    const newLead = await createLead({
       email: params.email,
       name: params.name,
       companyName: params.companyName,
       canonicalUrl: params.canonicalUrl,
       source: LeadSource.CALENDLY,
     });
-    await transitionLeadStatus(lead.id, LeadStatus.MEETING_SCHEDULED);
+    await transitionLeadStatus(newLead.id, LeadStatus.MEETING_SCHEDULED);
+    // Fetch with relations to match return type
+    lead = await getLeadById(newLead.id);
+    if (!lead) {
+      throw new Error('Failed to retrieve created lead');
+    }
   }
 
   // Find client if lead has been converted

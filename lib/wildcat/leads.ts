@@ -49,6 +49,13 @@ export async function updateLead(params: UpdateLeadParams) {
   return await prisma.lead.update({
     where: { id: params.leadId },
     data: updateData,
+    include: {
+      audit: true,
+      client: true,
+      payments: {
+        orderBy: { createdAt: 'desc' },
+      },
+    },
   });
 }
 

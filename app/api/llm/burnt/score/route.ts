@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin, unauthorizedResponse } from '@/lib/auth';
+import { requireAdmin, unauthorizedResponse, getCurrentUser } from '@/lib/auth';
+import { hasCapability, getUserPersona } from '@/lib/capabilities/check';
 import { runBurnt } from '@/lib/llms/runBurnt';
 import type { BurntScoreAPIRequest, BurntScoreAPIResponse } from '@/lib/llms/types';
+import { createClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -12,11 +14,21 @@ export async function POST(req: NextRequest) {
   const timeoutId = setTimeout(() => controller.abort(), HARD_TIMEOUT);
 
   try {
-    // Check admin authentication
-    const adminUser = await requireAdmin();
-    if (!adminUser) {
+    // Check authentication and capability
+    const user = await getCurrentUser();
+    if (!user) {
       clearTimeout(timeoutId);
       return unauthorizedResponse('Authentication required');
+    }
+
+    // Check if user has use_burnt_scoring capability or is Smokey
+    const hasBurntCapability = await hasCapability(user.id, 'use_burnt_scoring');
+    if (!hasBurntCapability) {
+      clearTimeout(timeoutId);
+      return NextResponse.json(
+        { error: 'You do not have permission to use Burnt. Please upgrade your subscription.' },
+        { status: 403 }
+      );
     }
 
     // Parse request body
@@ -55,6 +67,23 @@ export async function POST(req: NextRequest) {
       prioritizedActions: result.prioritizedActions,
       burntScores: result.burntScores,
     };
+
+    // Store in llm_runs
+    const persona = await getUserPersona(user.id);
+    const supabase = createClient();
+    try {
+      await supabase.from('llm_runs').insert({
+        user_id: user.id,
+        persona: persona || 'bulldog',
+        tool: 'burnt',
+        input: { actions, optionalContext },
+        output: response,
+        visibility: persona === 'smokey' ? 'internal' : 'client',
+      });
+    } catch (err) {
+      console.error('Error storing Burnt run:', err);
+      // Don't fail the request if storage fails
+    }
 
     return NextResponse.json(response);
   } catch (error: any) {

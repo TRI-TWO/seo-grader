@@ -218,7 +218,7 @@ export default function Home() {
               {/* Left Card - Red */}
               <div className="flex-1 bg-red-500 rounded-lg p-6 flex items-center justify-between">
                 <div>
-                  <div className="text-2xl font-bold">$299 Base</div>
+                  <div className="text-2xl font-bold">$299 Starter</div>
                   <div className="text-red-100 text-sm">$299 Check</div>
                 </div>
                 <div className="w-10 h-10 text-white">
@@ -233,7 +233,7 @@ export default function Home() {
               {/* Middle Card - Yellow */}
               <div className="flex-1 bg-yellow-500 rounded-lg p-6 flex items-center justify-between">
                 <div>
-                  <div className="text-2xl font-bold">$499 Pro Tier</div>
+                  <div className="text-2xl font-bold">$499 Growth</div>
                   <div className="text-yellow-100 text-sm">Deep Analysis</div>
                 </div>
               </div>

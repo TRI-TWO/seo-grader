@@ -1369,20 +1369,20 @@ function ReportPageContent() {
               </div>
 
               {/* Pricing Cards */}
-              {/* Base Plan - Full Width */}
+              {/* Starter Plan - Full Width */}
               <div className="bg-red-500 rounded-lg p-6 text-center">
                 <div className="text-3xl font-bold text-white mb-2">$299</div>
-                <div className="text-xl font-semibold text-white mb-2">Base Tier</div>
+                <div className="text-xl font-semibold text-white mb-2">Starter Tier</div>
                 <div className="text-red-100 text-sm">Essential Monthly Local SEO Maintenance</div>
               </div>
 
-              {/* Pro and Enterprise Plans - Side by Side */}
+              {/* Growth and Enterprise Plans - Side by Side */}
               <div className="grid grid-cols-2 gap-3">
-                {/* Pro Plan */}
-                <div className="bg-orange-500 rounded-lg p-6 text-center">
+                {/* Growth Plan */}
+                <div className="bg-yellow-500 rounded-lg p-6 text-center">
                   <div className="text-2xl font-bold text-white mb-2">$499</div>
-                  <div className="text-lg font-semibold text-white mb-2">Pro Tier</div>
-                  <div className="text-orange-100 text-xs">Growth-Focused SEO for Competitive Markets</div>
+                  <div className="text-lg font-semibold text-white mb-2">Growth Tier</div>
+                  <div className="text-yellow-100 text-xs">Growth-Focused SEO for Competitive Markets</div>
                 </div>
 
                 {/* Enterprise Plan */}

@@ -5,6 +5,9 @@ import {
   processStage3Sync,
   type AuditResults,
 } from "@/lib/auditStagesSync";
+import { getCurrentUser } from "@/lib/auth";
+import { hasCapability, getUserPersona } from "@/lib/capabilities/check";
+import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -70,6 +73,19 @@ export async function POST(req: NextRequest) {
   try {
     console.log("AUDIT: ENTERED ROUTE");
 
+    // Check if user is logged in and has capability (optional - public audits allowed)
+    const user = await getCurrentUser();
+    if (user) {
+      const hasAuditCapability = await hasCapability(user.id, 'run_audit');
+      if (!hasAuditCapability) {
+        clearTimeout(timeoutId);
+        return NextResponse.json(
+          { error: 'You do not have permission to run audits. Please upgrade your subscription.' },
+          { status: 403 }
+        );
+      }
+    }
+
     const { url } = await req.json();
     console.log("AUDIT: AFTER BODY PARSE", url);
 
@@ -81,6 +97,25 @@ export async function POST(req: NextRequest) {
 
     const stage3 = await processStage3Sync(stage2);
     console.log("AUDIT: AFTER STAGE 3", stage3.aiScoreRaw);
+
+    // Store in llm_runs if user is logged in
+    if (user) {
+      const persona = await getUserPersona(user.id);
+      const supabase = createClient();
+      try {
+        await supabase.from('llm_runs').insert({
+          user_id: user.id,
+          persona: persona || 'bulldog',
+          tool: 'audit',
+          input: { url },
+          output: stage3,
+          visibility: persona === 'smokey' ? 'internal' : 'client',
+        });
+      } catch (err) {
+        console.error('Error storing audit run:', err);
+        // Don't fail the request if storage fails
+      }
+    }
 
     clearTimeout(timeoutId);
     return NextResponse.json({ results: stage3 });

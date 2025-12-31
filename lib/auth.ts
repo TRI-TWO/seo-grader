@@ -3,6 +3,7 @@ import { createClient as createBrowserClient } from '@/lib/supabase/client'
 import { NextResponse } from 'next/server'
 import type { User } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
+import { isSmokeyUser, getUserPersona, hasCapability } from '@/lib/capabilities/check'
 
 export type UserRole = 'ADMIN' | 'VISITOR'
 
@@ -73,7 +74,8 @@ export async function requireAuth(): Promise<{ user: User; role: UserRole } | nu
 
 /**
  * Require admin role for API routes
- * Checks if user email is mgr@tri-two.com
+ * Checks if user is Smokey persona (bypasses tier logic)
+ * Falls back to email check for backward compatibility
  * Returns the user if admin, or null if not
  */
 export async function requireAdmin(): Promise<User | null> {
@@ -83,12 +85,36 @@ export async function requireAdmin(): Promise<User | null> {
     return null
   }
   
-  // Check if user is admin by email
+  // Check if user is Smokey persona (new system)
+  const isSmokey = await isSmokeyUser(user.id)
+  if (isSmokey) {
+    return user
+  }
+  
+  // Fallback: Check if user is admin by email (backward compatibility)
   if (user.email === 'mgr@tri-two.com') {
     return user
   }
   
   return null
+}
+
+/**
+ * Check if user has a specific capability
+ * Smokey users automatically have all capabilities
+ */
+export async function requireCapability(
+  userId: string,
+  capabilityKey: string
+): Promise<boolean> {
+  return await hasCapability(userId, capabilityKey)
+}
+
+/**
+ * Get user's persona (smokey or bulldog)
+ */
+export async function getPersona(userId: string): Promise<'smokey' | 'bulldog' | null> {
+  return await getUserPersona(userId)
 }
 
 /**

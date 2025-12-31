@@ -28,6 +28,8 @@ model AuditResult {
   url                       String
   userEmail                 String
   user                      User?                 @relation(fields: [userEmail], references: [email])
+  clientId                   String?
+  client                     Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
   isPaid                    Boolean               @default(false)
   hasAppointment            Boolean               @default(false)
   rawSeoJson                Json
@@ -44,6 +46,8 @@ model AuditResult {
   crawlabilityIndexScore    Int?
   createdAt                 DateTime              @default(now())
   appointments              CalendlyAppointment[]
+  
+  @@index([clientId])
 }
 
 model CalendlyAppointment {
@@ -90,6 +94,155 @@ model AuditJob {
 
   @@index([url, status, createdAt])
   @@index([status])
+}
+
+// Smokey + Bulldog Models
+enum PlanTier {
+  STARTER
+  GROWTH
+  ENTERPRISE
+}
+
+enum ClientStatus {
+  PROSPECT
+  ACTIVE
+  PAUSED
+  CANCELLED
+  AT_RISK
+}
+
+enum ContractStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum TimelineStatus {
+  UPCOMING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  RESCHEDULED
+}
+
+enum MeetingType {
+  DISCOVERY
+  ONBOARDING
+  QUARTERLY_REVIEW
+  AD_HOC
+}
+
+enum MeetingSource {
+  CALENDLY
+  MANUAL
+  INBOUND
+}
+
+enum EmailStatus {
+  SENT
+  FAILED
+  BOUNCED
+}
+
+model Client {
+  id                String   @id @default(cuid())
+  email             String
+  companyName       String?
+  canonicalUrl      String
+  planTier          PlanTier @default(STARTER)
+  contractStartDate DateTime
+  contractLengthMonths Int   @default(12)
+  status            ClientStatus @default(ACTIVE)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  contracts        Contract[]
+  timelines        ClientTimeline[]
+  meetings         Meeting[]
+  audits           AuditResult[] // Link to existing audits
+  
+  @@index([email])
+  @@index([status])
+}
+
+model Contract {
+  id                String   @id @default(cuid())
+  clientId          String
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  startDate         DateTime
+  endDate           DateTime
+  lengthMonths      Int
+  planTier          PlanTier
+  status            ContractStatus @default(ACTIVE)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([clientId])
+  @@index([status])
+}
+
+model TimelineTemplate {
+  id            String   @id @default(cuid())
+  planTier      PlanTier
+  phaseName     String
+  dayOffset     Int      // Days from contract start
+  toolSequence  Json     // Array of tool configs: [{tool: "audit", required: true}, ...]
+  description   String?
+  createdAt     DateTime @default(now())
+  
+  @@unique([planTier, phaseName])
+  @@index([planTier])
+}
+
+model ClientTimeline {
+  id                String   @id @default(cuid())
+  clientId          String
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  phaseName         String
+  scheduledDate     DateTime
+  status            TimelineStatus @default(UPCOMING)
+  toolSequence     Json     // Copied from template
+  executionResults Json?    // Store tool execution IDs
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([clientId])
+  @@index([status])
+  @@index([scheduledDate])
+}
+
+model Meeting {
+  id              String   @id @default(cuid())
+  clientId        String?
+  client          Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  calendlyEventId String? @unique
+  email          String
+  meetingType    MeetingType
+  meetingSource  MeetingSource
+  scheduledAt    DateTime
+  status         String   @default("scheduled")
+  auditTriggered Boolean  @default(false)
+  midnightTriggered Boolean @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@index([clientId])
+  @@index([email])
+  @@index([scheduledAt])
+}
+
+model EmailLog {
+  id            String   @id @default(cuid())
+  recipient     String
+  subject       String
+  templateType  String
+  sentAt        DateTime @default(now())
+  status        EmailStatus @default(SENT)
+  errorMessage  String?
+  metadata      Json?    // Store audit_id, client_id, etc.
+  
+  @@index([recipient])
+  @@index([sentAt])
 }
 
 // Auth models removed - using Supabase Auth instead

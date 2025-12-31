@@ -1,18 +1,56 @@
 "use client";
 
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
+import Script from "next/script";
+import { CALENDLY_URL } from "@/lib/constants";
+
+declare global {
+  interface Window {
+    Calendly?: {
+      initInlineWidget: (options: { url: string; parentElement: HTMLElement }) => void;
+    };
+  }
+}
 
 export default function PricingPage() {
+  const [showCalendlyModal, setShowCalendlyModal] = useState<boolean>(false);
+  const [calendlyScriptLoaded, setCalendlyScriptLoaded] = useState<boolean>(false);
+  const calendlyWidgetRef = useRef<HTMLDivElement>(null);
+
+  const handleScheduleClick = () => {
+    setShowCalendlyModal(true);
+  };
+
+  const handleCloseCalendlyModal = () => {
+    setShowCalendlyModal(false);
+  };
+
+  useEffect(() => {
+    if (showCalendlyModal && calendlyScriptLoaded && calendlyWidgetRef.current && window.Calendly) {
+      try {
+        if (calendlyWidgetRef.current) {
+          calendlyWidgetRef.current.innerHTML = '';
+        }
+        window.Calendly.initInlineWidget({
+          url: `${CALENDLY_URL}?background_color=1a1a1a&text_color=ffffff&primary_color=16b8a6`,
+          parentElement: calendlyWidgetRef.current!
+        });
+      } catch (error) {
+        console.error('Error initializing Calendly widget:', error);
+      }
+    }
+  }, [showCalendlyModal, calendlyScriptLoaded]);
+
   return (
     <main className="min-h-[calc(100vh-200px)] px-6 py-12">
       <div className="max-w-7xl mx-auto space-y-12">
         {/* Tier Cards Section */}
         <div className="grid md:grid-cols-3 gap-6">
-          {/* Base Plan */}
+          {/* Starter Plan */}
           <div className="bg-red-500 rounded-lg p-8 flex flex-col">
             <div className="mb-6">
               <div className="text-3xl font-bold mb-2">$299</div>
-              <div className="text-xl font-semibold text-white mb-2">Base Tier</div>
+              <div className="text-xl font-semibold text-white mb-2">Starter Tier</div>
               <div className="text-lg font-medium text-red-100 mb-3">Essential Monthly Local SEO Maintenance</div>
               <p className="text-red-100 text-sm leading-relaxed">
                 Designed for contractors who need consistent visibility without heavy content or link work.
@@ -65,16 +103,19 @@ export default function PricingPage() {
               </ul>
             </div>
 
-            <button className="w-full py-3 bg-white hover:bg-gray-100 text-red-500 font-semibold rounded-lg transition-colors">
-              Get Started
+            <button 
+              onClick={handleScheduleClick}
+              className="w-full py-3 bg-white hover:bg-gray-100 text-red-500 font-semibold rounded-lg transition-colors"
+            >
+              Get Started!
             </button>
           </div>
 
-          {/* Pro Plan */}
+          {/* Growth Plan */}
           <div className="bg-yellow-500 rounded-lg p-8 flex flex-col">
             <div className="mb-6">
               <div className="text-3xl font-bold mb-2">$499</div>
-              <div className="text-xl font-semibold text-white mb-2">Pro Tier</div>
+              <div className="text-xl font-semibold text-white mb-2">Growth Tier</div>
               <div className="text-lg font-medium text-yellow-100 mb-3">Growth-Focused SEO for Competitive Markets</div>
               <p className="text-yellow-100 text-sm leading-relaxed">
                 For businesses actively trying to rank over competitors and expand service visibility.
@@ -127,8 +168,11 @@ export default function PricingPage() {
               </ul>
             </div>
 
-            <button className="w-full py-3 bg-white hover:bg-gray-100 text-yellow-500 font-semibold rounded-lg transition-colors">
-              Get Started
+            <button 
+              onClick={handleScheduleClick}
+              className="w-full py-3 bg-white hover:bg-gray-100 text-yellow-500 font-semibold rounded-lg transition-colors"
+            >
+              Get Started!
             </button>
           </div>
 
@@ -193,8 +237,12 @@ export default function PricingPage() {
               </ul>
             </div>
 
-            <button className="w-full py-3 bg-white hover:bg-gray-100 font-semibold rounded-lg transition-colors text-mint-signal">
-              Contact Sales
+            <button 
+              onClick={handleScheduleClick}
+              className="w-full py-3 bg-white hover:bg-gray-100 font-semibold rounded-lg transition-colors"
+              style={{ color: '#16b8a6' }}
+            >
+              Get Started!
             </button>
           </div>
         </div>
@@ -207,8 +255,8 @@ export default function PricingPage() {
               <thead>
                 <tr>
                 <th className="bg-steel-gray text-left p-4 text-white font-semibold sticky left-0 z-10">Feature</th>
-                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Base<br />$299</th>
-                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Pro<br />$499</th>
+                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Starter<br />$299</th>
+                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Growth<br />$499</th>
                 <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Enterprise<br />$699</th>
                 </tr>
               </thead>
@@ -350,18 +398,28 @@ export default function PricingPage() {
                 <tr className="bg-zinc-800">
                   <td className="p-4 sticky left-0 z-10 bg-zinc-800"></td>
                   <td className="p-4 text-center">
-                    <button className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors">
-                      Get Started
+                    <button 
+                      onClick={handleScheduleClick}
+                      className="w-full py-3 bg-white hover:bg-gray-100 text-red-500 font-semibold rounded-lg transition-colors"
+                    >
+                      Get Started!
                     </button>
                   </td>
                   <td className="p-4 text-center">
-                    <button className="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg transition-colors">
-                      Get Started
+                    <button 
+                      onClick={handleScheduleClick}
+                      className="w-full py-3 bg-white hover:bg-gray-100 text-yellow-500 font-semibold rounded-lg transition-colors"
+                    >
+                      Get Started!
                     </button>
                   </td>
                   <td className="p-4 text-center">
-                    <button className="w-full py-3 bg-teal-500 hover:bg-teal-600 text-white font-semibold rounded-lg transition-colors">
-                      Contact Sales
+                    <button 
+                      onClick={handleScheduleClick}
+                      className="w-full py-3 bg-white hover:bg-gray-100 font-semibold rounded-lg transition-colors"
+                      style={{ color: '#16b8a6' }}
+                    >
+                      Get Started!
                     </button>
                   </td>
                 </tr>
@@ -370,6 +428,49 @@ export default function PricingPage() {
           </div>
         </div>
       </div>
+
+      {/* Calendly Modal Overlay */}
+      {showCalendlyModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
+          onClick={handleCloseCalendlyModal}
+        >
+          <div 
+            className="bg-zinc-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={handleCloseCalendlyModal}
+              className="absolute top-4 right-4 z-10 text-white hover:text-gray-300 bg-zinc-800 rounded-full p-2 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Calendly Inline Widget */}
+            <div 
+              ref={calendlyWidgetRef}
+              style={{ minWidth: '320px', height: '700px', width: '100%' }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Calendly Widget Script */}
+      <Script
+        src="https://assets.calendly.com/assets/external/widget.js"
+        strategy="lazyOnload"
+        onLoad={() => {
+          setCalendlyScriptLoaded(true);
+          console.log('Calendly script loaded');
+        }}
+        onError={(e) => {
+          console.error('Error loading Calendly script:', e);
+        }}
+      />
     </main>
   );
 }

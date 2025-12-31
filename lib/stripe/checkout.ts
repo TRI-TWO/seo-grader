@@ -1,4 +1,4 @@
-import { stripe, STRIPE_UNLOCK_PRICE_ID } from './client';
+import { stripe } from './client';
 import type Stripe from 'stripe';
 
 export interface CreateCheckoutSessionParams {
@@ -14,8 +14,8 @@ export interface CreateCheckoutSessionParams {
 export async function createUnlockCheckoutSession(
   params: CreateCheckoutSessionParams
 ): Promise<Stripe.Checkout.Session> {
-  // Check at runtime, not module load time
-  const priceId = process.env.STRIPE_UNLOCK_PRICE_ID || STRIPE_UNLOCK_PRICE_ID;
+  // Read at runtime to ensure Vercel env vars are available
+  const priceId = process.env.STRIPE_UNLOCK_PRICE_ID;
   if (!priceId) {
     throw new Error('STRIPE_UNLOCK_PRICE_ID is not set in environment variables. Please set it in Vercel environment variables.');
   }

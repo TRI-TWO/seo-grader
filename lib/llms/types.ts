@@ -97,6 +97,7 @@ export interface CrimsonAPIRequest {
   goal: string;
   tonePreset?: string;
   optionalAuditContext?: any;
+  templateId?: string; // Template ID when using template-based flow
 }
 
 export interface CrimsonAPIResponse {

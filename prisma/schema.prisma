@@ -185,17 +185,15 @@ model Lead {
   source        LeadSource
   auditId       String?
   audit         AuditResult? @relation(fields: [auditId], references: [id], onDelete: SetNull)
-  clientId      String?
-  client        Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
   metadata      Json?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   
   payments      Payment[]
+  client        Client?
   
   @@index([email])
   @@index([status])
-  @@index([clientId])
 }
 
 model Payment {
@@ -232,7 +230,7 @@ model Client {
   contractStartDate DateTime
   contractLengthMonths Int   @default(12)
   status            ClientStatus @default(ACTIVE)
-  leadId            String?
+  leadId            String?  @unique
   lead              Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -245,7 +243,6 @@ model Client {
   
   @@index([email])
   @@index([status])
-  @@index([leadId])
 }
 
 model Contract {

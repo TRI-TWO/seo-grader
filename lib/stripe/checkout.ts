@@ -17,7 +17,14 @@ export async function createUnlockCheckoutSession(
   // Read at runtime to ensure Vercel env vars are available
   const priceId = process.env.STRIPE_UNLOCK_PRICE_ID;
   if (!priceId) {
-    throw new Error('STRIPE_UNLOCK_PRICE_ID is not set in environment variables. Please set it in Vercel environment variables.');
+    // Debug: Log available env vars (without exposing secrets)
+    const envKeys = Object.keys(process.env).filter(key => key.includes('STRIPE'));
+    console.error('STRIPE_UNLOCK_PRICE_ID not found. Available STRIPE env vars:', envKeys);
+    throw new Error(
+      `STRIPE_UNLOCK_PRICE_ID is not set in environment variables. ` +
+      `Please verify it's set in Vercel with the exact name: STRIPE_UNLOCK_PRICE_ID. ` +
+      `Available STRIPE vars: ${envKeys.join(', ')}`
+    );
   }
 
   const session = await stripe.checkout.sessions.create({

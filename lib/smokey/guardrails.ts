@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { PlanTier } from '@prisma/client';
+import { PlanTier, ClientStatus } from '@prisma/client';
 
 const TIER_LIMITS: Record<PlanTier, { maxPagesPerMonth: number; allowMultiLocation: boolean; allowProgrammatic: boolean }> = {
   STARTER: {
@@ -87,6 +87,49 @@ export async function requireActiveContract(clientId: string): Promise<{ valid: 
   const now = new Date();
   if (activeContract.endDate < now) {
     return { valid: false, reason: 'Contract has expired' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Enforce that Smokey only works with clients in 'signed' or 'active' status.
+ * Smokey exists ONLY after a client is real (i.e. signed, paid, or contract started).
+ */
+export async function requireSignedOrActiveClient(clientId: string): Promise<{ valid: boolean; reason?: string }> {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+  });
+
+  if (!client) {
+    return { valid: false, reason: 'Client not found' };
+  }
+
+  // Only allow SIGNED or ACTIVE status
+  if (client.status !== ClientStatus.SIGNED && client.status !== ClientStatus.ACTIVE) {
+    return {
+      valid: false,
+      reason: `Client must be in 'signed' or 'active' status to use Smokey. Current status: ${client.status}`,
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Precondition check: Client must be signed or active AND have an active contract.
+ */
+export async function validateSmokeyPreconditions(clientId: string): Promise<{ valid: boolean; reason?: string }> {
+  // Check client status
+  const statusCheck = await requireSignedOrActiveClient(clientId);
+  if (!statusCheck.valid) {
+    return statusCheck;
+  }
+
+  // Check active contract
+  const contractCheck = await requireActiveContract(clientId);
+  if (!contractCheck.valid) {
+    return contractCheck;
   }
 
   return { valid: true };

@@ -1,12 +1,19 @@
 import { prisma } from '@/lib/prisma';
 import { PlanTier, TimelineStatus, Client } from '@prisma/client';
 import { getTimelineTemplate, type TimelinePhase } from './templates';
+import { validateSmokeyPreconditions } from './guardrails';
 
 export async function instantiateTimeline(
   clientId: string,
   contractStartDate: Date,
   planTier: PlanTier
 ): Promise<void> {
+  // Validate preconditions: client must be signed/active with active contract
+  const preconditions = await validateSmokeyPreconditions(clientId);
+  if (!preconditions.valid) {
+    throw new Error(`Smokey precondition failed: ${preconditions.reason}`);
+  }
+
   const client = await prisma.client.findUnique({
     where: { id: clientId },
   });
@@ -65,6 +72,12 @@ export async function skipPhase(timelineId: string): Promise<void> {
 }
 
 export async function regenerateTimeline(clientId: string): Promise<void> {
+  // Validate preconditions: client must be signed/active with active contract
+  const preconditions = await validateSmokeyPreconditions(clientId);
+  if (!preconditions.valid) {
+    throw new Error(`Smokey precondition failed: ${preconditions.reason}`);
+  }
+
   const client = await prisma.client.findUnique({
     where: { id: clientId },
     include: { contracts: { where: { status: 'ACTIVE' }, take: 1 } },

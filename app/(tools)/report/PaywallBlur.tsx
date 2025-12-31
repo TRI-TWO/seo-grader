@@ -13,6 +13,7 @@ interface PaywallBlurProps {
 export default function PaywallBlur({ children, isPaywalled = true, className = "" }: PaywallBlurProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPaid, setIsPaid] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -33,16 +34,30 @@ export default function PaywallBlur({ children, isPaywalled = true, className = 
     return () => subscription.unsubscribe();
   }, []);
 
+  // Check if audit is paid (check URL params for session_id from Stripe)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sessionId = urlParams.get('session_id');
+      if (sessionId) {
+        // If session_id is present, payment was successful
+        setIsPaid(true);
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, []);
+
   const isAuthenticated = !!user;
   const isAdmin = user && user.email === 'mgr@tri-two.com';
   
   // Debug: Verify component is rendering
   if (typeof window !== 'undefined' && !loading) {
-    console.log('PaywallBlur rendering, isPaywalled:', isPaywalled, 'isAuthenticated:', isAuthenticated, 'isAdmin:', isAdmin);
+    console.log('PaywallBlur rendering, isPaywalled:', isPaywalled, 'isAuthenticated:', isAuthenticated, 'isAdmin:', isAdmin, 'isPaid:', isPaid);
   }
   
-  // If user is admin or authenticated, bypass paywall (admin always bypasses)
-  if (!isPaywalled || isAdmin || isAuthenticated) {
+  // If user is admin, authenticated, or payment completed, bypass paywall
+  if (!isPaywalled || isAdmin || isAuthenticated || isPaid) {
     return <div className={className}>{children}</div>;
   }
 

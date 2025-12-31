@@ -46,6 +46,7 @@ model AuditResult {
   crawlabilityIndexScore    Int?
   createdAt                 DateTime              @default(now())
   appointments              CalendlyAppointment[]
+  leads                     Lead[]
   
   @@index([clientId])
 }
@@ -66,7 +67,8 @@ model CalendlyAppointment {
 model SubscriptionPlan {
   id            String             @id @default(cuid())
   name          String
-  squarePlanId  String
+  stripeProductId String?
+  stripePriceId String?
   priceCents    Int
   subscriptions UserSubscription[]
 }
@@ -104,8 +106,13 @@ enum PlanTier {
 }
 
 enum ClientStatus {
-  PROSPECT
+  ANONYMOUS
+  PAID_UNLOCK
+  MEETING_SCHEDULED
+  PROPOSAL_SENT
+  SIGNED
   ACTIVE
+  DECLINED
   PAUSED
   CANCELLED
   AT_RISK
@@ -138,10 +145,82 @@ enum MeetingSource {
   INBOUND
 }
 
+enum LeadSource {
+  STRIPE
+  CALENDLY
+  MANUAL
+  INBOUND
+}
+
+enum LeadStatus {
+  ANONYMOUS
+  PAID_UNLOCK
+  MEETING_SCHEDULED
+  PROPOSAL_SENT
+  SIGNED
+  ACTIVE
+  DECLINED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
 enum EmailStatus {
   SENT
   FAILED
   BOUNCED
+}
+
+model Lead {
+  id            String     @id @default(cuid())
+  email         String
+  name          String?
+  companyName   String?
+  canonicalUrl  String?
+  status        LeadStatus @default(ANONYMOUS)
+  source        LeadSource
+  auditId       String?
+  audit         AuditResult? @relation(fields: [auditId], references: [id], onDelete: SetNull)
+  clientId      String?
+  client        Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  metadata      Json?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  payments      Payment[]
+  
+  @@index([email])
+  @@index([status])
+  @@index([clientId])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  stripeSessionId       String        @unique
+  stripePaymentIntentId String?
+  leadId                String?
+  lead                  Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  clientId              String?
+  client                Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  amountCents           Int
+  currency              String        @default("usd")
+  status                PaymentStatus @default(PENDING)
+  customerName          String?
+  companyName           String?
+  canonicalUrl          String?
+  email                 String
+  metadata              Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  
+  @@index([leadId])
+  @@index([clientId])
+  @@index([stripeSessionId])
+  @@index([status])
 }
 
 model Client {
@@ -153,6 +232,8 @@ model Client {
   contractStartDate DateTime
   contractLengthMonths Int   @default(12)
   status            ClientStatus @default(ACTIVE)
+  leadId            String?
+  lead              Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
@@ -160,9 +241,11 @@ model Client {
   timelines        ClientTimeline[]
   meetings         Meeting[]
   audits           AuditResult[] // Link to existing audits
+  payments         Payment[]
   
   @@index([email])
   @@index([status])
+  @@index([leadId])
 }
 
 model Contract {

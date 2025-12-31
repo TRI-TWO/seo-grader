@@ -8,6 +8,7 @@ import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type Scor
 import scoringConfig from "@/lib/scoring-config.json";
 import PaywallBlur from "./PaywallBlur";
 import ScoreBlur from "./ScoreBlur";
+import StripeCheckout from "./StripeCheckout";
 import { createClient } from "@/lib/supabase/client";
 // BrandLogo and HamburgerMenu are now in the layout
 
@@ -1363,9 +1364,10 @@ function ReportPageContent() {
 
               {/* Upgrade Results Button */}
               <div className="bg-zinc-800 rounded-lg border border-zinc-700 p-6">
-                <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-xl px-8 py-4 rounded-lg transition shadow-lg">
-                  $5.99 Upgrade Results
-                </button>
+                <StripeCheckout 
+                  canonicalUrl={finalUrl || ""}
+                  auditId={apiData?.id}
+                />
               </div>
 
               {/* Pricing Cards */}

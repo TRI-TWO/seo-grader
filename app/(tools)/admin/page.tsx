@@ -47,6 +47,22 @@ const tiles = [
     path: '/admin/burnt',
     flows: ['burnt-orchestrate'],
   },
+  {
+    id: 'smokey',
+    label: 'Smokey',
+    subtitle: 'Planner',
+    color: '#4a5568',
+    path: '/admin/smokey',
+    flows: [],
+  },
+  {
+    id: 'wildcat',
+    label: 'Wildcat',
+    subtitle: 'CRM',
+    color: '#2F80FF',
+    path: '/admin/wildcat',
+    flows: [],
+  },
 ];
 
 export default function AdminDashboard() {

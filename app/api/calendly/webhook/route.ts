@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { handleMeetingScheduled } from "@/lib/wildcat/automation";
 
 export const runtime = "nodejs";
 
@@ -122,19 +123,35 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Create appointment record
-      await prisma.calendlyAppointment.create({
-        data: {
+      // Use Wildcat automation to handle meeting scheduled
+      try {
+        await handleMeetingScheduled({
+          email: payload.invitee.email,
+          name: payload.invitee.name,
+          companyName: payload.questions_and_answers?.find(qa => 
+            qa.question.toLowerCase().includes("company")
+          )?.answer,
+          canonicalUrl: auditUrl,
           calendlyEventId: eventId,
-          url: auditUrl || "https://calendly.com/mgr-tri-two",
-          userEmail: payload.invitee.email,
           scheduledAt: scheduledAt,
-          status: "scheduled",
-          auditId: auditId,
-        },
-      });
+          meetingType: 'DISCOVERY',
+        });
 
-      console.log(`Created appointment record for ${payload.invitee.email} at ${scheduledAt}`);
+        console.log(`Wildcat: Meeting scheduled for ${payload.invitee.email} at ${scheduledAt}`);
+      } catch (error) {
+        console.error("Error in Wildcat automation:", error);
+        // Fallback: create appointment record directly
+        await prisma.calendlyAppointment.create({
+          data: {
+            calendlyEventId: eventId,
+            url: auditUrl || "https://calendly.com/mgr-tri-two",
+            userEmail: payload.invitee.email,
+            scheduledAt: scheduledAt,
+            status: "scheduled",
+            auditId: auditId,
+          },
+        });
+      }
 
       return NextResponse.json({ success: true, message: "Appointment created" });
     } else if (event === "invitee.canceled") {

@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     try {
       await supabase.from('llm_runs').insert({
         user_id: user.id,
-        persona: persona || 'bulldog',
+        persona: persona || 'wildcat',
         tool: 'midnight',
         input: { url, mode, optionalAuditContext },
         output: response,

@@ -1,8 +1,8 @@
 -- Add persona and role columns to profiles
 ALTER TABLE profiles
 ADD COLUMN IF NOT EXISTS persona TEXT 
-  CHECK (persona IN ('smokey', 'bulldog')) 
-  NOT NULL DEFAULT 'bulldog',
+  CHECK (persona IN ('smokey', 'wildcat')) 
+  NOT NULL DEFAULT 'wildcat',
 ADD COLUMN IF NOT EXISTS role TEXT 
   CHECK (role IN ('admin', 'user')) 
   NOT NULL DEFAULT 'user';

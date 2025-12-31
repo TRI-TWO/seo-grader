@@ -110,7 +110,7 @@ export async function isSmokeyUser(userId: string): Promise<boolean> {
 /**
  * Get user's persona
  */
-export async function getUserPersona(userId: string): Promise<'smokey' | 'bulldog' | null> {
+export async function getUserPersona(userId: string): Promise<'smokey' | 'wildcat' | null> {
   const supabase = createClient();
 
   const { data: profile } = await supabase
@@ -119,6 +119,6 @@ export async function getUserPersona(userId: string): Promise<'smokey' | 'bulldo
     .eq('id', userId)
     .single();
 
-  return profile?.persona as 'smokey' | 'bulldog' | null;
+  return profile?.persona as 'smokey' | 'wildcat' | null;
 }
 

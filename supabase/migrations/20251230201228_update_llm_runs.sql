@@ -1,6 +1,6 @@
 -- Add new columns to llm_runs
 ALTER TABLE llm_runs
-ADD COLUMN IF NOT EXISTS persona TEXT CHECK (persona IN ('smokey', 'bulldog')),
+ADD COLUMN IF NOT EXISTS persona TEXT CHECK (persona IN ('smokey', 'wildcat')),
 ADD COLUMN IF NOT EXISTS template_id TEXT,
 ADD COLUMN IF NOT EXISTS visibility TEXT 
   CHECK (visibility IN ('private', 'client', 'internal')) 

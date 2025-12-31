@@ -111,9 +111,9 @@ export async function requireCapability(
 }
 
 /**
- * Get user's persona (smokey or bulldog)
+ * Get user's persona (smokey or wildcat)
  */
-export async function getPersona(userId: string): Promise<'smokey' | 'bulldog' | null> {
+export async function getPersona(userId: string): Promise<'smokey' | 'wildcat' | null> {
   return await getUserPersona(userId)
 }
 

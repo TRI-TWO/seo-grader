@@ -96,7 +96,7 @@ model AuditJob {
   @@index([status])
 }
 
-// Smokey + Bulldog Models
+// Smokey + Wildcat Models
 enum PlanTier {
   STARTER
   GROWTH

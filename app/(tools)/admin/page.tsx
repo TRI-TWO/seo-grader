@@ -53,6 +53,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [selectedPersona, setSelectedPersona] = useState<'smokey' | 'wildcat' | null>(null);
   
   // Modal/form state
   const [activeFlow, setActiveFlow] = useState<string | null>(null);
@@ -66,6 +67,13 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     checkAdminAccess();
+    // Load persona from sessionStorage on mount
+    if (typeof window !== 'undefined') {
+      const storedPersona = sessionStorage.getItem('admin_persona');
+      if (storedPersona === 'smokey' || storedPersona === 'wildcat') {
+        setSelectedPersona(storedPersona);
+      }
+    }
   }, []);
 
   const checkAdminAccess = async () => {
@@ -218,6 +226,13 @@ export default function AdminDashboard() {
     return flowId.includes('midnight');
   };
 
+  const handlePersonaSelect = (persona: 'smokey' | 'wildcat') => {
+    setSelectedPersona(persona);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('admin_persona', persona);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(to bottom, #0b0f1a, #05070d)' }}>
@@ -288,6 +303,71 @@ export default function AdminDashboard() {
             <h1 className="text-4xl md:text-5xl font-bold mb-12 text-center text-white">
               ADMIN PAGE
             </h1>
+
+            {/* Persona Selector Section */}
+            <div className="mb-16">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-semibold text-white mb-2">Operating Mode</h2>
+                <p className="text-cool-ash text-sm max-w-2xl mx-auto">
+                  Choose how you want to operate in the system. This affects context, visibility, and workflows — not data ownership.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-6">
+                {/* Smokey Card */}
+                <div
+                  onClick={() => handlePersonaSelect('smokey')}
+                  className={`cursor-pointer rounded-lg p-6 min-w-[280px] flex flex-col transition-all ${
+                    selectedPersona === 'smokey' 
+                      ? 'ring-2 ring-white ring-opacity-50 scale-105' 
+                      : 'hover:scale-105'
+                  }`}
+                  style={{
+                    backgroundColor: '#4a5568',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    boxShadow: selectedPersona === 'smokey' 
+                      ? '0 4px 20px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.3)' 
+                      : '0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                  }}
+                >
+                  <div className="text-2xl font-bold text-white mb-1">
+                    Smokey
+                  </div>
+                  <div className="text-sm text-white opacity-80 mb-3">
+                    Internal Operator
+                  </div>
+                  <div className="text-xs text-white opacity-70">
+                    Full system visibility. No paywalls. Diagnostic and build mode.
+                  </div>
+                </div>
+
+                {/* Wildcat Card */}
+                <div
+                  onClick={() => handlePersonaSelect('wildcat')}
+                  className={`cursor-pointer rounded-lg p-6 min-w-[280px] flex flex-col transition-all ${
+                    selectedPersona === 'wildcat' 
+                      ? 'ring-2 ring-white ring-opacity-50 scale-105' 
+                      : 'hover:scale-105'
+                  }`}
+                  style={{
+                    backgroundColor: '#2F80FF',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    boxShadow: selectedPersona === 'wildcat' 
+                      ? '0 4px 20px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.3)' 
+                      : '0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                  }}
+                >
+                  <div className="text-2xl font-bold text-white mb-1">
+                    Wildcat
+                  </div>
+                  <div className="text-sm text-white opacity-80 mb-3">
+                    Client Perspective
+                  </div>
+                  <div className="text-xs text-white opacity-70">
+                    Represents how a client would experience workflows and outputs.
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* 4 Tiles - Centered */}
             <div className="flex flex-wrap justify-center gap-8">

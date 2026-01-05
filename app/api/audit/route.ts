@@ -76,13 +76,17 @@ export async function POST(req: NextRequest) {
     // Check if user is logged in and has capability (optional - public audits allowed)
     const user = await getCurrentUser();
     if (user) {
-      const hasAuditCapability = await hasCapability(user.id, 'run_audit');
-      if (!hasAuditCapability) {
-        clearTimeout(timeoutId);
-        return NextResponse.json(
-          { error: 'You do not have permission to run audits. Please upgrade your subscription.' },
-          { status: 403 }
-        );
+      // Admin users (mgr@tri-two.com) always have permission
+      const isAdmin = user.email === 'mgr@tri-two.com';
+      if (!isAdmin) {
+        const hasAuditCapability = await hasCapability(user.id, 'run_audit');
+        if (!hasAuditCapability) {
+          clearTimeout(timeoutId);
+          return NextResponse.json(
+            { error: 'You do not have permission to run audits. Please upgrade your subscription.' },
+            { status: 403 }
+          );
+        }
       }
     }
 

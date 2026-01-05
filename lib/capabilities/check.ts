@@ -22,7 +22,14 @@ export async function hasCapability(
   }
 
   // Check if user is admin by email (bypasses all tier checks)
+  // Check both profile email and auth.users email as fallback
   if (profile?.email === 'mgr@tri-two.com') {
+    return true; // Admin has all capabilities
+  }
+
+  // Fallback: check auth.users email if profile email is not set
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user?.id === userId && user?.email === 'mgr@tri-two.com') {
     return true; // Admin has all capabilities
   }
 

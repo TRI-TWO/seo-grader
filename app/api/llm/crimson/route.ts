@@ -21,15 +21,19 @@ export async function POST(req: NextRequest) {
       return unauthorizedResponse('Authentication required');
     }
 
-    // Check if user has Crimson capability (templates or review)
-    const hasTemplatesCapability = await hasCapability(user.id, 'use_crimson_templates');
-    const hasReviewCapability = await hasCapability(user.id, 'use_crimson_review');
-    if (!hasTemplatesCapability && !hasReviewCapability) {
-      clearTimeout(timeoutId);
-      return NextResponse.json(
-        { error: 'You do not have permission to use Crimson. Please upgrade your subscription.' },
-        { status: 403 }
-      );
+    // Admin users (mgr@tri-two.com) always have permission
+    const isAdmin = user.email === 'mgr@tri-two.com';
+    if (!isAdmin) {
+      // Check if user has Crimson capability (templates or review)
+      const hasTemplatesCapability = await hasCapability(user.id, 'use_crimson_templates');
+      const hasReviewCapability = await hasCapability(user.id, 'use_crimson_review');
+      if (!hasTemplatesCapability && !hasReviewCapability) {
+        clearTimeout(timeoutId);
+        return NextResponse.json(
+          { error: 'You do not have permission to use Crimson. Please upgrade your subscription.' },
+          { status: 403 }
+        );
+      }
     }
 
     // Parse request body

@@ -21,14 +21,18 @@ export async function POST(req: NextRequest) {
       return unauthorizedResponse('Authentication required');
     }
 
-    // Check if user has use_midnight capability or is Smokey
-    const hasMidnightCapability = await hasCapability(user.id, 'use_midnight');
-    if (!hasMidnightCapability) {
-      clearTimeout(timeoutId);
-      return NextResponse.json(
-        { error: 'You do not have permission to use Midnight. Please upgrade your subscription.' },
-        { status: 403 }
-      );
+    // Admin users (mgr@tri-two.com) always have permission
+    const isAdmin = user.email === 'mgr@tri-two.com';
+    if (!isAdmin) {
+      // Check if user has use_midnight capability
+      const hasMidnightCapability = await hasCapability(user.id, 'use_midnight');
+      if (!hasMidnightCapability) {
+        clearTimeout(timeoutId);
+        return NextResponse.json(
+          { error: 'You do not have permission to use Midnight. Please upgrade your subscription.' },
+          { status: 403 }
+        );
+      }
     }
 
     // Parse request body

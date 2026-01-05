@@ -21,14 +21,18 @@ export async function POST(req: NextRequest) {
       return unauthorizedResponse('Authentication required');
     }
 
-    // Check if user has use_burnt_scoring capability or is Smokey
-    const hasBurntCapability = await hasCapability(user.id, 'use_burnt_scoring');
-    if (!hasBurntCapability) {
-      clearTimeout(timeoutId);
-      return NextResponse.json(
-        { error: 'You do not have permission to use Burnt. Please upgrade your subscription.' },
-        { status: 403 }
-      );
+    // Admin users (mgr@tri-two.com) always have permission
+    const isAdmin = user.email === 'mgr@tri-two.com';
+    if (!isAdmin) {
+      // Check if user has use_burnt_scoring capability
+      const hasBurntCapability = await hasCapability(user.id, 'use_burnt_scoring');
+      if (!hasBurntCapability) {
+        clearTimeout(timeoutId);
+        return NextResponse.json(
+          { error: 'You do not have permission to use Burnt. Please upgrade your subscription.' },
+          { status: 403 }
+        );
+      }
     }
 
     // Parse request body

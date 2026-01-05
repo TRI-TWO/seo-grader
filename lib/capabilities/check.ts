@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 
 /**
  * Check if user has a specific capability
- * Smokey users bypass all checks (have all capabilities)
+ * Smokey users and admin users (mgr@tri-two.com) bypass all checks (have all capabilities)
  */
 export async function hasCapability(
   userId: string,
@@ -13,12 +13,17 @@ export async function hasCapability(
   // Check if user is Smokey (bypasses all tier checks)
   const { data: profile } = await supabase
     .from('profiles')
-    .select('persona')
+    .select('persona, email')
     .eq('id', userId)
     .single();
 
   if (profile?.persona === 'smokey') {
     return true; // Smokey has all capabilities
+  }
+
+  // Check if user is admin by email (bypasses all tier checks)
+  if (profile?.email === 'mgr@tri-two.com') {
+    return true; // Admin has all capabilities
   }
 
   // Get user's subscription tier

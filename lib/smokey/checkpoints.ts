@@ -79,9 +79,7 @@ export async function evaluateCheckpoint(
     include: {
       tasks: {
         where: { taskNumber },
-        include: {
-          checkpoint: true,
-        },
+        // Note: checkpoint fetched explicitly when needed
       },
       client: true,
     },

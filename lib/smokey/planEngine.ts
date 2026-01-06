@@ -24,15 +24,7 @@ export async function getActivePlans(clientId: string) {
         orderBy: {
           taskNumber: 'asc',
         },
-        include: {
-          checkpoint: true,
-          toolSessions: {
-            orderBy: {
-              createdAt: 'desc',
-            },
-            take: 1,
-          },
-        },
+        // Note: checkpoint and toolSessions fetched explicitly when needed
       },
       dependsOnPlan: true,
       dependentPlans: true,
@@ -139,7 +131,7 @@ export async function createPlanInstance(
   );
 
   // Determine initial status
-  let initialStatus = 'pending';
+  let initialStatus: string = 'pending';
   if (canActivate.canActivate) {
     initialStatus = 'active';
   } else {
@@ -199,9 +191,7 @@ export async function getNextTask(planId: string) {
         orderBy: {
           taskNumber: 'asc',
         },
-        include: {
-          checkpoint: true,
-        },
+        // Note: checkpoint fetched explicitly when needed
       },
     },
   });
@@ -295,9 +285,7 @@ export async function getClientPlans(clientId: string) {
         orderBy: {
           taskNumber: 'asc',
         },
-        include: {
-          checkpoint: true,
-        },
+        // Note: checkpoint fetched explicitly when needed
       },
       dependsOnPlan: true,
       dependentPlans: true,
@@ -322,9 +310,7 @@ export async function getPlansByMonth(clientId: string, month: number) {
         orderBy: {
           taskNumber: 'asc',
         },
-        include: {
-          checkpoint: true,
-        },
+        // Note: checkpoint fetched explicitly when needed
       },
     },
     orderBy: {

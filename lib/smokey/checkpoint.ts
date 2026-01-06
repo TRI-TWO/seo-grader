@@ -87,9 +87,6 @@ export async function evaluateCheckpoint(
     include: {
       steps: {
         where: { stepNumber },
-        include: {
-          checkpoint: true,
-        },
       },
       client: true,
     },
@@ -174,25 +171,9 @@ export async function evaluateCheckpoint(
   // Get checkpoint config from template
   const checkpointConfig = template?.checkpoint;
 
-  // Save checkpoint result with config
-  await prisma.checkpoint.upsert({
-    where: { playStepId: step.id },
-    create: {
-      playStepId: step.id,
-      result: evaluation.result,
-      evaluatedAt: new Date(),
-      evaluationData: evaluation.data,
-      validateWith: checkpointConfig?.validateWith || 'audit',
-      successConditions: checkpointConfig?.successConditions || [],
-    },
-    update: {
-      result: evaluation.result,
-      evaluatedAt: new Date(),
-      evaluationData: evaluation.data,
-      validateWith: checkpointConfig?.validateWith || 'audit',
-      successConditions: checkpointConfig?.successConditions || [],
-    },
-  });
+  // Note: Legacy Play system - old Checkpoint model was removed
+  // Checkpoint results are now stored in evaluationData on PlayStep
+  // or handled by the new Plan/Task system
 
   // Handle checkpoint result
   if (evaluation.result === CheckpointResult.PASS) {
@@ -520,25 +501,9 @@ export async function manualCheckpointEvaluation(
   const template = play ? getPlayTemplate(play.playType) : undefined;
   const checkpointConfig = template?.checkpoint;
 
-  // Save checkpoint result with config
-  await prisma.checkpoint.upsert({
-    where: { playStepId: step.id },
-    create: {
-      playStepId: step.id,
-      result: evaluation.result,
-      evaluatedAt: new Date(),
-      evaluationData: evaluation.data,
-      validateWith: checkpointConfig?.validateWith || 'manual',
-      successConditions: checkpointConfig?.successConditions || [],
-    },
-    update: {
-      result: evaluation.result,
-      evaluatedAt: new Date(),
-      evaluationData: evaluation.data,
-      validateWith: checkpointConfig?.validateWith || 'manual',
-      successConditions: checkpointConfig?.successConditions || [],
-    },
-  });
+  // Note: Legacy Play system - old Checkpoint model was removed
+  // Checkpoint results are now stored in evaluationData on PlayStep
+  // or handled by the new Plan/Task system
 
   // Handle checkpoint result
   if (evaluation.result === CheckpointResult.PASS) {

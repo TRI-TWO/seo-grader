@@ -109,7 +109,6 @@ export async function POST(
         return NextResponse.json({ success: true });
 
       case 'abort':
-        const { pausePlan } = await import('@/lib/smokey/planEngine');
         const aborted = await pausePlan(planId); // Pause is effectively abort for now
         return NextResponse.json({ plan: aborted });
 

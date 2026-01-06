@@ -3,11 +3,21 @@ import { PlayType, PlayStatus, StepStatus, ClientStatus } from '@prisma/client';
 import { getPlayTemplate } from './plays';
 import { validateSmokeyPreconditions } from './guardrails';
 import {
-  canActivatePlay,
+  canActivatePlan,
   checkWIPLimit,
-  getQueuedPlays,
-  activateQueuedPlay,
+  getQueuedPlans,
+  activateQueuedPlan,
 } from './parallel';
+
+// Legacy aliases for backward compatibility with Play system
+const canActivatePlay = canActivatePlan;
+const getQueuedPlays = getQueuedPlans;
+const activateQueuedPlay = activateQueuedPlan;
+
+// Legacy aliases for backward compatibility
+const canActivatePlay = canActivatePlan;
+const getQueuedPlays = getQueuedPlans;
+const activateQueuedPlay = activateQueuedPlan;
 
 /**
  * Get ALL active plays for a client (supports parallel plays)
@@ -413,5 +423,12 @@ export async function queuePlay(playId: string) {
     where: { id: playId },
     data: { status: PlayStatus.QUEUED },
   });
+}
+
+/**
+ * Get queued plays for a client (alias for getQueuedPlays)
+ */
+export async function getQueuedPlaysForClient(clientId: string) {
+  return await getQueuedPlays(clientId);
 }
 

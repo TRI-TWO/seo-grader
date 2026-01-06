@@ -83,7 +83,7 @@ export default function PlanCard({
           )}
           
           {/* Decision Confidence */}
-          {plan.decision?.decisionConfidence !== null && (
+          {plan.decision?.decisionConfidence !== null && plan.decision?.decisionConfidence !== undefined && (
             <p className="text-xs text-cool-ash mb-2">
               <span className="font-semibold">Confidence:</span> {formatConfidence(plan.decision.decisionConfidence)}
             </p>

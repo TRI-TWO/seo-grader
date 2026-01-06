@@ -183,9 +183,7 @@ export async function getDecision(decisionId: string) {
       plans: {
         include: {
           tasks: {
-            include: {
-              checkpoint: true,
-            },
+            // Note: checkpoint fetched explicitly when needed
           },
         },
       },

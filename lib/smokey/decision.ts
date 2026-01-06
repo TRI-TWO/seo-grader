@@ -29,7 +29,6 @@ export async function getActivePlays(clientId: string) {
           stepNumber: 'asc',
         },
         include: {
-          checkpoint: true,
           toolSessions: {
             orderBy: {
               createdAt: 'desc',

@@ -1,9 +1,16 @@
 import { prisma } from '@/lib/prisma';
-import { PlayType, CheckpointResult, StepStatus, PlayStatus } from '@prisma/client';
+import { PlayType, StepStatus, PlayStatus } from '@prisma/client';
 import { getPlayTemplate } from './plays';
 import { unlockNextStep } from './decision';
 import { regenerateTimelineAfterCheckpoint } from './migration';
 import { processStage1Sync, processStage2Sync, processStage3Sync } from '@/lib/auditStagesSync';
+
+// CheckpointResult enum (legacy - not exported by Prisma as it's not used by current models)
+enum CheckpointResult {
+  PASS = 'PASS',
+  PARTIAL = 'PARTIAL',
+  FAIL = 'FAIL',
+}
 
 const US_STATES = [
   { name: 'Alabama', abbr: 'AL' },

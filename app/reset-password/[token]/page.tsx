@@ -150,7 +150,7 @@ export default function SetNewPasswordPage() {
       </div>
 
       <div className="relative z-10">
-        <header className="flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
+        <header className="bg-void-black flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
           {/* Logo - Fully left justified */}
           <div className="flex-shrink-0">
             <BrandLogo />

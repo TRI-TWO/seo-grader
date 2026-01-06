@@ -69,7 +69,7 @@ export default function MarketingLayout({
 
       <div className="relative z-10">
         {/* Header */}
-        <header className="px-6 py-2 md:px-12 md:py-3">
+        <header className="bg-void-black px-6 py-2 md:px-12 md:py-3">
           <div className="flex items-start justify-between">
             {/* Logo - Fully left justified */}
             <div className="flex-shrink-0">

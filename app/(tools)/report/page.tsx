@@ -1,26 +1,16 @@
 "use client";
 
-import React, { useEffect, useState, Suspense, useRef } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Script from "next/script";
 import { scoreTitle, scoreMedia, type TitleMetrics, type MediaMetrics, type ScoringConfig } from "@/lib/scoring";
 import scoringConfig from "@/lib/scoring-config.json";
 import PaywallBlur from "./PaywallBlur";
 import ScoreBlur from "./ScoreBlur";
 import StripeCheckout from "./StripeCheckout";
 import { createClient } from "@/lib/supabase/client";
+import TierIcon from "@/components/TierIcon";
 // BrandLogo and HamburgerMenu are now in the layout
-
-// TypeScript declaration for Calendly
-declare global {
-  interface Window {
-    Calendly?: {
-      initInlineWidget: (options: { url: string; parentElement: HTMLElement }) => void;
-      initPopupWidget: (options: { url: string }) => void;
-    };
-  }
-}
 
 type AuditData = {
   titleTag: string;
@@ -66,9 +56,7 @@ function ReportPageContent() {
   const [aiMetrics, setAiMetrics] = useState<AIMetrics | null>(null);
   const [mediaMetrics, setMediaMetrics] = useState<any>(null);
   const [partialAudit, setPartialAudit] = useState<boolean>(false);
-  const [showCalendlyModal, setShowCalendlyModal] = useState<boolean>(false);
-  const [calendlyScriptLoaded, setCalendlyScriptLoaded] = useState<boolean>(false);
-  const calendlyWidgetRef = useRef<HTMLDivElement>(null);
+  const [showAppointmentModal, setShowAppointmentModal] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   // Helper function to truncate URL at domain extension
@@ -92,14 +80,14 @@ function ReportPageContent() {
     }
   };
 
-  // Calendly modal handler
+  // Appointment scheduling modal handler
   const handleScheduleClick = () => {
-    setShowCalendlyModal(true);
+    setShowAppointmentModal(true);
   };
 
-  // Close Calendly modal
-  const handleCloseCalendlyModal = () => {
-    setShowCalendlyModal(false);
+  // Close appointment modal
+  const handleCloseAppointmentModal = () => {
+    setShowAppointmentModal(false);
   };
 
   // Calculate AI metrics if not already set - ALWAYS from actual HTML, never placeholders
@@ -119,25 +107,6 @@ function ReportPageContent() {
     // NEVER set placeholder/default values - only use actual calculated results
   }, [apiData?.html, aiMetrics]);
 
-  // Initialize Calendly widget when modal opens and script is loaded
-  useEffect(() => {
-    if (showCalendlyModal && calendlyScriptLoaded && calendlyWidgetRef.current && window.Calendly) {
-      // Clear any existing content
-      if (calendlyWidgetRef.current) {
-        calendlyWidgetRef.current.innerHTML = '';
-      }
-      
-      // Initialize the inline widget
-      try {
-        window.Calendly.initInlineWidget({
-          url: 'https://calendly.com/mgr-tri-two?background_color=1a1a1a&text_color=ffffff&primary_color=16b8a6',
-          parentElement: calendlyWidgetRef.current
-        });
-      } catch (error) {
-        console.error('Error initializing Calendly widget:', error);
-      }
-    }
-  }, [showCalendlyModal, calendlyScriptLoaded]);
 
   useEffect(() => {
     // Load states data
@@ -1374,23 +1343,32 @@ function ReportPageContent() {
               {/* Starter Plan - Full Width */}
               <div className="bg-red-500 rounded-lg p-6 text-center">
                 <div className="text-3xl font-bold text-white mb-2">$299</div>
-                <div className="text-xl font-semibold text-white mb-2">Starter Tier</div>
+                <div className="text-xl font-semibold text-white mb-2 flex items-center justify-center gap-2">
+                  Starter Tier
+                  <TierIcon tier="compass" size={20} />
+                </div>
                 <div className="text-red-100 text-sm">Essential Monthly Local SEO Maintenance</div>
               </div>
 
-              {/* Growth and Enterprise Plans - Side by Side */}
+              {/* Growth and Accelerate Plans - Side by Side */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Growth Plan */}
                 <div className="bg-yellow-500 rounded-lg p-6 text-center">
                   <div className="text-2xl font-bold text-white mb-2">$499</div>
-                  <div className="text-lg font-semibold text-white mb-2">Growth Tier</div>
+                  <div className="text-lg font-semibold text-white mb-2 flex items-center justify-center gap-2">
+                    Growth Tier
+                    <TierIcon tier="plant" size={20} />
+                  </div>
                   <div className="text-yellow-100 text-xs">Growth-Focused SEO for Competitive Markets</div>
                 </div>
 
-                {/* Enterprise Plan */}
+                {/* Accelerate Plan */}
                 <div className="rounded-lg p-6 text-center" style={{ backgroundColor: '#16b8a6' }}>
                   <div className="text-2xl font-bold text-white mb-2">$699</div>
-                  <div className="text-lg font-semibold text-white mb-2">Enterprise Tier</div>
+                  <div className="text-lg font-semibold text-white mb-2 flex items-center justify-center gap-2">
+                    Accelerate Tier
+                    <TierIcon tier="ball" size={20} />
+                  </div>
                   <div className="text-xs" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>Regional SEO + Multi-Location Dominance</div>
                 </div>
               </div>
@@ -1399,11 +1377,11 @@ function ReportPageContent() {
         </div>
       </main>
 
-      {/* Calendly Modal Overlay */}
-      {showCalendlyModal && (
+      {/* Appointment Scheduling Modal */}
+      {showAppointmentModal && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
-          onClick={handleCloseCalendlyModal}
+          onClick={handleCloseAppointmentModal}
         >
           <div 
             className="bg-zinc-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden relative"
@@ -1411,7 +1389,7 @@ function ReportPageContent() {
           >
             {/* Close Button */}
             <button
-              onClick={handleCloseCalendlyModal}
+              onClick={handleCloseAppointmentModal}
               className="absolute top-4 right-4 z-10 text-white hover:text-gray-300 bg-zinc-800 rounded-full p-2 transition-colors"
               aria-label="Close"
             >
@@ -1420,27 +1398,17 @@ function ReportPageContent() {
               </svg>
             </button>
 
-            {/* Calendly Inline Widget */}
-            <div 
-              ref={calendlyWidgetRef}
-              style={{ minWidth: '320px', height: '700px', width: '100%' }}
+            {/* Google Calendar Appointment Scheduling */}
+            <iframe 
+              src="https://calendar.google.com/calendar/appointments/AcZssZ0CsGnT8Yh1Xx9gJSni7UZ_F8bs7CBI4n9yDFo=?gv=true" 
+              style={{ border: 0 }} 
+              width="100%" 
+              height="600" 
+              frameBorder="0"
             />
           </div>
         </div>
       )}
-
-      {/* Calendly Widget Script */}
-      <Script
-        src="https://assets.calendly.com/assets/external/widget.js"
-        strategy="lazyOnload"
-        onLoad={() => {
-          setCalendlyScriptLoaded(true);
-          console.log('Calendly script loaded');
-        }}
-        onError={(e) => {
-          console.error('Error loading Calendly script:', e);
-        }}
-      />
     </>
   );
 }

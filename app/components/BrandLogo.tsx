@@ -13,7 +13,7 @@ interface BrandLogoProps {
 
 export default function BrandLogo({ 
   variant = 'lockup', 
-  size = 120, 
+  size = 240, 
   className = '',
   priority = false 
 }: BrandLogoProps) {

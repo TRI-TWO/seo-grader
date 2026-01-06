@@ -435,7 +435,7 @@ export const PLAY_TEMPLATES: Partial<Record<PlayType, PlayTemplate>> = {
     playType: PlayType.STRUCTURE_UX,
     objective: 'Improve hero, navigation, services grid, and footer structure',
     triggerConditions: [
-      "layout_guidance_present=true AND tier in ('growth','enterprise')",
+      "layout_guidance_present=true AND tier in ('growth','accelerate')",
     ],
     allowedTools: ['manual', 'midnight', 'audit'],
     steps: [

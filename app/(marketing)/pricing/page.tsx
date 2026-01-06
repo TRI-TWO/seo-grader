@@ -1,46 +1,18 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import Script from "next/script";
-import { CALENDLY_URL } from "@/lib/constants";
-
-declare global {
-  interface Window {
-    Calendly?: {
-      initInlineWidget: (options: { url: string; parentElement: HTMLElement }) => void;
-      initPopupWidget: (options: { url: string }) => void;
-    };
-  }
-}
+import React, { useState } from "react";
+import TierIcon from "@/components/TierIcon";
 
 export default function PricingPage() {
-  const [showCalendlyModal, setShowCalendlyModal] = useState<boolean>(false);
-  const [calendlyScriptLoaded, setCalendlyScriptLoaded] = useState<boolean>(false);
-  const calendlyWidgetRef = useRef<HTMLDivElement>(null);
+  const [showAppointmentModal, setShowAppointmentModal] = useState<boolean>(false);
 
   const handleScheduleClick = () => {
-    setShowCalendlyModal(true);
+    setShowAppointmentModal(true);
   };
 
-  const handleCloseCalendlyModal = () => {
-    setShowCalendlyModal(false);
+  const handleCloseAppointmentModal = () => {
+    setShowAppointmentModal(false);
   };
-
-  useEffect(() => {
-    if (showCalendlyModal && calendlyScriptLoaded && calendlyWidgetRef.current && window.Calendly) {
-      try {
-        if (calendlyWidgetRef.current) {
-          calendlyWidgetRef.current.innerHTML = '';
-        }
-        window.Calendly.initInlineWidget({
-          url: `${CALENDLY_URL}?background_color=1a1a1a&text_color=ffffff&primary_color=16b8a6`,
-          parentElement: calendlyWidgetRef.current!
-        });
-      } catch (error) {
-        console.error('Error initializing Calendly widget:', error);
-      }
-    }
-  }, [showCalendlyModal, calendlyScriptLoaded]);
 
   return (
     <main className="min-h-[calc(100vh-200px)] px-6 py-12">
@@ -51,7 +23,10 @@ export default function PricingPage() {
           <div className="bg-red-500 rounded-lg p-8 flex flex-col">
             <div className="mb-6">
               <div className="text-3xl font-bold mb-2">$299</div>
-              <div className="text-xl font-semibold text-white mb-2">Starter Tier</div>
+              <div className="text-xl font-semibold text-white mb-2 flex items-center gap-2">
+                Starter Tier
+                <TierIcon tier="compass" size={24} />
+              </div>
               <div className="text-lg font-medium text-red-100 mb-3">Essential Monthly Local SEO Maintenance</div>
               <p className="text-red-100 text-sm leading-relaxed">
                 Designed for contractors who need consistent visibility without heavy content or link work.
@@ -116,7 +91,10 @@ export default function PricingPage() {
           <div className="bg-yellow-500 rounded-lg p-8 flex flex-col">
             <div className="mb-6">
               <div className="text-3xl font-bold mb-2">$499</div>
-              <div className="text-xl font-semibold text-white mb-2">Growth Tier</div>
+              <div className="text-xl font-semibold text-white mb-2 flex items-center gap-2">
+                Growth Tier
+                <TierIcon tier="plant" size={24} />
+              </div>
               <div className="text-lg font-medium text-yellow-100 mb-3">Growth-Focused SEO for Competitive Markets</div>
               <p className="text-yellow-100 text-sm leading-relaxed">
                 For businesses actively trying to rank over competitors and expand service visibility.
@@ -177,11 +155,14 @@ export default function PricingPage() {
             </button>
           </div>
 
-          {/* Enterprise Plan */}
+          {/* Accelerate Plan */}
           <div className="rounded-lg p-8 flex flex-col bg-teal-500">
             <div className="mb-6">
               <div className="text-3xl font-bold mb-2">$699</div>
-              <div className="text-xl font-semibold text-white mb-2">Enterprise Tier</div>
+              <div className="text-xl font-semibold text-white mb-2 flex items-center gap-2">
+                Accelerate Tier
+                <TierIcon tier="ball" size={24} />
+              </div>
               <div className="text-lg font-medium text-teal-100 mb-3">Regional SEO + Multi-Location Dominance</div>
               <p className="text-teal-100 text-sm leading-relaxed">
                 Built for companies expanding into multiple cities or running multiple service divisions.
@@ -256,9 +237,27 @@ export default function PricingPage() {
               <thead>
                 <tr>
                 <th className="bg-steel-gray text-left p-4 text-white font-semibold sticky left-0 z-10">Feature</th>
-                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Starter<br />$299</th>
-                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Growth<br />$499</th>
-                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">Enterprise<br />$699</th>
+                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">
+                  <div className="flex items-center justify-center gap-2">
+                    Starter
+                    <TierIcon tier="compass" size={20} />
+                  </div>
+                  <div>$299</div>
+                </th>
+                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">
+                  <div className="flex items-center justify-center gap-2">
+                    Growth
+                    <TierIcon tier="plant" size={20} />
+                  </div>
+                  <div>$499</div>
+                </th>
+                <th className="bg-steel-gray text-center p-4 text-white font-semibold min-w-[180px]">
+                  <div className="flex items-center justify-center gap-2">
+                    Accelerate
+                    <TierIcon tier="ball" size={20} />
+                  </div>
+                  <div>$699</div>
+                </th>
                 </tr>
               </thead>
               <tbody>
@@ -430,11 +429,11 @@ export default function PricingPage() {
         </div>
       </div>
 
-      {/* Calendly Modal Overlay */}
-      {showCalendlyModal && (
+      {/* Appointment Scheduling Modal */}
+      {showAppointmentModal && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
-          onClick={handleCloseCalendlyModal}
+          onClick={handleCloseAppointmentModal}
         >
           <div 
             className="bg-zinc-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden relative"
@@ -442,7 +441,7 @@ export default function PricingPage() {
           >
             {/* Close Button */}
             <button
-              onClick={handleCloseCalendlyModal}
+              onClick={handleCloseAppointmentModal}
               className="absolute top-4 right-4 z-10 text-white hover:text-gray-300 bg-zinc-800 rounded-full p-2 transition-colors"
               aria-label="Close"
             >
@@ -451,27 +450,17 @@ export default function PricingPage() {
               </svg>
             </button>
 
-            {/* Calendly Inline Widget */}
-            <div 
-              ref={calendlyWidgetRef}
-              style={{ minWidth: '320px', height: '700px', width: '100%' }}
+            {/* Google Calendar Appointment Scheduling */}
+            <iframe 
+              src="https://calendar.google.com/calendar/appointments/AcZssZ0CsGnT8Yh1Xx9gJSni7UZ_F8bs7CBI4n9yDFo=?gv=true" 
+              style={{ border: 0 }} 
+              width="100%" 
+              height="600" 
+              frameBorder="0"
             />
           </div>
         </div>
       )}
-
-      {/* Calendly Widget Script */}
-      <Script
-        src="https://assets.calendly.com/assets/external/widget.js"
-        strategy="lazyOnload"
-        onLoad={() => {
-          setCalendlyScriptLoaded(true);
-          console.log('Calendly script loaded');
-        }}
-        onError={(e) => {
-          console.error('Error loading Calendly script:', e);
-        }}
-      />
     </main>
   );
 }

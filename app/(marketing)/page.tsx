@@ -236,12 +236,17 @@ export default function Home() {
                   <div className="text-2xl font-bold">$499 Growth</div>
                   <div className="text-yellow-100 text-sm">Deep Analysis</div>
                 </div>
+                <div className="w-10 h-10 text-white">
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                  </svg>
+                </div>
               </div>
 
               {/* Right Card - Teal */}
               <div className="flex-1 bg-teal-500 rounded-lg p-6 flex items-center justify-between">
                 <div>
-                  <div className="text-2xl font-bold">$699 Enterprise</div>
+                  <div className="text-2xl font-bold">$699 Accelerate</div>
                   <div className="text-teal-100 text-sm">Custom Solutions</div>
                 </div>
                 <div className="w-10 h-10 text-white">

@@ -10,9 +10,10 @@ import {
 } from './parallel';
 
 // Legacy aliases for backward compatibility with Play system
-const canActivatePlay = canActivatePlan;
-const getQueuedPlays = getQueuedPlans;
-const activateQueuedPlay = activateQueuedPlan;
+// These are exported so legacy code can import them, but they delegate to Plan system
+export const canActivatePlay = canActivatePlan;
+export const getQueuedPlays = getQueuedPlans;
+export const activateQueuedPlay = activateQueuedPlan;
 
 /**
  * Get ALL active plays for a client (supports parallel plays)
@@ -43,6 +44,8 @@ export async function getActivePlays(clientId: string) {
 /**
  * Get the active play for a client (backward compatibility)
  * Returns first active play
+ * @deprecated Use getActivePlan from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function getActivePlay(clientId: string) {
   const plays = await getActivePlays(clientId);
@@ -98,6 +101,11 @@ export async function suggestPlay(clientId: string): Promise<PlayType | null> {
 /**
  * Create a new play instance for a client
  * Checks WIP limit and dependencies, queues if needed
+ */
+/**
+ * Create a play
+ * @deprecated Use createPlanInstance from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function createPlay(
   clientId: string,
@@ -192,6 +200,8 @@ export async function createPlay(
 
 /**
  * Get the next unlocked step for a play
+ * @deprecated Use getNextTask from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function getNextStep(playId: string) {
   const play = await prisma.play.findUnique({
@@ -223,6 +233,8 @@ export async function getNextStep(playId: string) {
 
 /**
  * Unlock the next step after checkpoint passes
+ * @deprecated Use unlockNextTask from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function unlockNextStep(playId: string, currentStepNumber: number) {
   const play = await prisma.play.findUnique({
@@ -276,6 +288,8 @@ export async function unlockNextStep(playId: string, currentStepNumber: number) 
 
 /**
  * Branch to a new play when checkpoint fails
+ * @deprecated Use branchPlan from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function branchPlay(
   playId: string,
@@ -318,6 +332,8 @@ export async function branchPlay(
 
 /**
  * Pause an active play
+ * @deprecated Use pausePlan from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function pausePlay(playId: string) {
   return await prisma.play.update({
@@ -330,6 +346,8 @@ export async function pausePlay(playId: string) {
 
 /**
  * Resume a paused play
+ * @deprecated Use resumePlan from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function resumePlay(playId: string) {
   return await prisma.play.update({
@@ -342,6 +360,8 @@ export async function resumePlay(playId: string) {
 
 /**
  * Get all plays for a client (including completed/branched)
+ * @deprecated Use getClientPlans from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function getClientPlays(clientId: string) {
   return await prisma.play.findMany({
@@ -364,6 +384,8 @@ export async function getClientPlays(clientId: string) {
 
 /**
  * Get plays scheduled for a specific month
+ * @deprecated Use getPlansByMonth from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function getPlaysByMonth(clientId: string, month: number) {
   return await prisma.play.findMany({
@@ -387,6 +409,8 @@ export async function getPlaysByMonth(clientId: string, month: number) {
 
 /**
  * Schedule a play for a specific month
+ * @deprecated Use schedulePlanForMonth from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function schedulePlayForMonth(playId: string, month: number) {
   return await prisma.play.update({
@@ -397,6 +421,8 @@ export async function schedulePlayForMonth(playId: string, month: number) {
 
 /**
  * Queue a play (move to QUEUED status)
+ * @deprecated Use queuePlan from planEngine.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function queuePlay(playId: string) {
   return await prisma.play.update({

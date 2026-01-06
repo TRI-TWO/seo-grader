@@ -34,10 +34,7 @@ export async function GET(
         include: {
           tasks: {
             orderBy: { taskNumber: 'asc' },
-            include: {
-              checkpoint: true,
-              toolSessions: true,
-            },
+            // Note: checkpoint and toolSessions fetched explicitly when needed
           },
           dependsOnPlan: true,
           dependentPlans: true,

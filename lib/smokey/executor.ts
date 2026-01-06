@@ -67,6 +67,8 @@ type ToolConfig = {
 
 /**
  * Execute a play step by running the configured tools
+ * @deprecated Use executeTask from taskExecutor.ts for Plan/Task system.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function executePlayStep(
   playId: string,

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
+/**
+ * @deprecated This route is for legacy Play system.
+ * Use /api/admin/smokey/plans/[planId] for new Plan/Task execution.
+ * This route is kept for read-only access to historical Play data.
+ */
 import {
   pausePlay,
   resumePlay,

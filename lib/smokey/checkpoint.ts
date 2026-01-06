@@ -77,6 +77,8 @@ export type CheckpointEvaluation = {
 /**
  * Evaluate a checkpoint for a play step
  * Returns pass/partial/fail based on play type and audit results
+ * @deprecated Use evaluateCheckpoint from checkpoints.ts (Plan/Task version) for new execution.
+ * This function is kept for read-only access to historical Play data.
  */
 export async function evaluateCheckpoint(
   playId: string,

@@ -1,5 +1,29 @@
 import { PlayType } from '@prisma/client';
 import { getPlayTemplate, evaluateTriggerConditions } from './plays';
+import { getPlanTemplate } from './plans';
+import { createPlanInstance } from './planEngine';
+import { canActivatePlan } from './parallel';
+
+/**
+ * Map PlayType enum to planType string
+ */
+function mapPlayTypeToPlanType(playType: PlayType): string {
+  const mapping: Record<PlayType, string> = {
+    [PlayType.TITLE_SEARCH_RELEVANCE]: 'title_search_relevance',
+    [PlayType.TECHNICAL_FOUNDATIONS]: 'technical_foundations',
+    [PlayType.IMAGE_ALT_COVERAGE]: 'image_alt_coverage',
+    [PlayType.SCHEMA_FOUNDATION]: 'schema_foundation',
+    [PlayType.AI_MODULARITY]: 'ai_modularity',
+    [PlayType.ENTITY_COVERAGE]: 'entity_coverage',
+    [PlayType.TRUST_SIGNALS]: 'trust_signals',
+    [PlayType.CRAWL_INDEX]: 'crawl_index',
+    [PlayType.STRUCTURE_UX]: 'structure_ux',
+    [PlayType.HOMEPAGE_ELIGIBILITY]: 'title_search_relevance', // Map to closest equivalent
+    [PlayType.TRUST_STRUCTURING]: 'trust_signals', // Map to closest equivalent
+    [PlayType.AI_READABILITY]: 'ai_modularity', // Map to closest equivalent
+  };
+  return mapping[playType] || 'title_search_relevance';
+}
 
 /**
  * Analyze audit results and return array of play types that match trigger conditions
@@ -100,8 +124,9 @@ export function analyzeAuditForPlays(auditResults: any): {
 }
 
 /**
- * Auto-generate plays from audit results
- * Creates plays based on triggered conditions
+ * Auto-generate plans from audit results
+ * Creates plans based on triggered conditions (migrated from Play system)
+ * @deprecated This function name is legacy - it now creates Plans, not Plays
  */
 export async function generatePlaysFromAudit(
   clientId: string,
@@ -111,9 +136,6 @@ export async function generatePlaysFromAudit(
   suggested: PlayType[];
   skipped: PlayType[];
 }> {
-  const { createPlay } = await import('./decision');
-  const { canActivatePlay } = await import('./parallel');
-
   const triggeredPlays = getTriggeredPlays(auditResults);
   const created: any[] = [];
   const suggested: PlayType[] = [];
@@ -121,20 +143,30 @@ export async function generatePlaysFromAudit(
 
   for (const playType of triggeredPlays) {
     try {
-      // Check if can activate
-      const canActivate = await canActivatePlay(clientId, playType);
+      // Map PlayType to planType string
+      const planType = mapPlayTypeToPlanType(playType);
+      
+      // Check if plan template exists
+      const template = getPlanTemplate(planType);
+      if (!template) {
+        skipped.push(playType);
+        continue;
+      }
+
+      // Check if can activate using Plan system
+      const canActivate = await canActivatePlan(clientId, planType, null);
 
       if (canActivate.canActivate) {
-        // Create play immediately
-        const play = await createPlay(clientId, playType);
-        created.push(play);
+        // Create plan immediately using Plan system
+        const plan = await createPlanInstance(clientId, planType, undefined, undefined, undefined, false);
+        created.push(plan);
       } else {
         // Queue or suggest
         if (canActivate.reason?.includes('WIP limit')) {
-          // Will be queued automatically by createPlay
+          // Will be queued automatically by createPlanInstance
           try {
-            const play = await createPlay(clientId, playType);
-            created.push(play);
+            const plan = await createPlanInstance(clientId, planType, undefined, undefined, undefined, false);
+            created.push(plan);
           } catch (error) {
             suggested.push(playType);
           }

@@ -181,9 +181,7 @@ export async function createPlay(
         orderBy: {
           stepNumber: 'asc',
         },
-        include: {
-          checkpoint: true,
-        },
+        // Note: Legacy Play system - checkpoint relation removed
       },
       dependencyPlay: true,
     },
@@ -203,9 +201,7 @@ export async function getNextStep(playId: string) {
         orderBy: {
           stepNumber: 'asc',
         },
-        include: {
-          checkpoint: true,
-        },
+        // Note: Legacy Play system - checkpoint relation removed
       },
     },
   });
@@ -355,9 +351,7 @@ export async function getClientPlays(clientId: string) {
         orderBy: {
           stepNumber: 'asc',
         },
-        include: {
-          checkpoint: true,
-        },
+        // Note: Legacy Play system - checkpoint relation removed
       },
       dependencyPlay: true,
       dependentPlays: true,
@@ -382,9 +376,7 @@ export async function getPlaysByMonth(clientId: string, month: number) {
         orderBy: {
           stepNumber: 'asc',
         },
-        include: {
-          checkpoint: true,
-        },
+        // Note: Legacy Play system - checkpoint relation removed
       },
     },
     orderBy: {

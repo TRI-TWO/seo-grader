@@ -28,14 +28,8 @@ export async function getActivePlays(clientId: string) {
         orderBy: {
           stepNumber: 'asc',
         },
-        include: {
-          toolSessions: {
-            orderBy: {
-              createdAt: 'desc',
-            },
-            take: 1,
-          },
-        },
+        // Note: Legacy Play system - toolSessions relation removed
+        // New ToolSession model is related to Task, not PlayStep
       },
       dependencyPlay: true,
       dependentPlays: true,

@@ -25,11 +25,14 @@ export async function POST(req: NextRequest) {
     // Admin users (mgr@tri-two.com) always have permission
     const isAdmin = user.email === 'mgr@tri-two.com';
     
+    // Parse request body early (needed for CTA flow validation)
+    const body: MidnightAPIRequest = await req.json();
+    
     // CTA Flow Validation: Execution tools (Midnight) can only be called from Burnt or Smokey
     // Admin can override, but for non-admin users, validate CTA flow
     if (!isAdmin) {
       const referer = req.headers.get('referer');
-      const fromTool = req.headers.get('x-from-tool') || body.fromTool;
+      const fromTool = req.headers.get('x-from-tool');
       const sourceRole = getToolRoleFromContext(referer, fromTool, user.email);
       
       // Validate CTA flow - Midnight can only be called from Burnt or Smokey
@@ -58,9 +61,6 @@ export async function POST(req: NextRequest) {
     
     // Guardrail: Execution tools cannot create plans or decisions
     // This is enforced by not exposing plan/decision creation APIs to execution tools
-
-    // Parse request body
-    const body: MidnightAPIRequest = await req.json();
     const { url, mode, optionalAuditContext } = body;
 
     // Validate required fields

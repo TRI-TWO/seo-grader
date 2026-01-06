@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     // Admin can override, but for non-admin users, validate CTA flow
     if (!isAdmin) {
       const referer = req.headers.get('referer');
-      const fromTool = req.headers.get('x-from-tool') || body.fromTool;
+      const fromTool = req.headers.get('x-from-tool');
       const sourceRole = getToolRoleFromContext(referer, fromTool, user.email);
       
       // Validate CTA flow - Crimson can only be called from Burnt or Smokey

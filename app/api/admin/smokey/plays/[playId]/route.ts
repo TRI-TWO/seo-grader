@@ -12,7 +12,14 @@ import {
   evaluateCheckpointWithAudit,
   manualCheckpointEvaluation,
 } from '@/lib/smokey/checkpoint';
-import { PlayType, CheckpointResult } from '@prisma/client';
+import { PlayType } from '@prisma/client';
+
+// CheckpointResult enum (legacy - not exported by Prisma as it's not used by current models)
+enum CheckpointResult {
+  PASS = 'PASS',
+  PARTIAL = 'PARTIAL',
+  FAIL = 'FAIL',
+}
 
 export async function GET(
   req: NextRequest,

@@ -1,5 +1,13 @@
 import { prisma } from '@/lib/prisma';
-import { ToolSessionStatus } from '@prisma/client';
+
+// ToolSessionStatus enum is not exported by Prisma Client because ToolSession model uses String
+// Define it locally for backward compatibility
+enum ToolSessionStatus {
+  CREATED = 'created',
+  LAUNCHED = 'launched',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
 
 export type ToolPayload = {
   url?: string;
@@ -12,6 +20,8 @@ export type ToolPayload = {
 
 /**
  * Create a tool session for a play step
+ * @deprecated This function is for legacy Play system. Use Task-based tool sessions for new Plan/Task system.
+ * The new ToolSession model uses taskId/planId, not playStepId/playId.
  */
 export async function createToolSession(
   playStepId: string,
@@ -30,17 +40,22 @@ export async function createToolSession(
     throw new Error(`Play step ${playStepId} not found`);
   }
 
-  const session = await prisma.toolSession.create({
-    data: {
-      playStepId,
-      playId: playStep.playId,
-      tool,
-      status: ToolSessionStatus.CREATED,
-      payload,
-    },
-  });
-
-  return session;
+  // Note: New ToolSession model doesn't have playStepId/playId fields
+  // This function is kept for legacy compatibility but will fail with new schema
+  // TODO: Update to use Task/Plan system or remove if no longer needed
+  throw new Error('createToolSession for PlayStep is deprecated. Use Task-based tool sessions instead.');
+  
+  // Legacy code (commented out - won't work with new schema):
+  // const session = await prisma.toolSession.create({
+  //   data: {
+  //     playStepId,
+  //     playId: playStep.playId,
+  //     tool,
+  //     status: ToolSessionStatus.CREATED,
+  //     payload,
+  //   },
+  // });
+  // return session;
 }
 
 /**
@@ -63,7 +78,7 @@ export async function launchToolSession(sessionId: string) {
   const updatedSession = await prisma.toolSession.update({
     where: { id: sessionId },
     data: {
-      status: ToolSessionStatus.LAUNCHED,
+      status: ToolSessionStatus.LAUNCHED, // String value: 'launched'
       launchedAt: new Date(),
     },
   });
@@ -190,37 +205,28 @@ export async function failToolSession(sessionId: string, error: string) {
 
 /**
  * Get active tool session for a play step
+ * @deprecated This function is for legacy Play system. Use Task-based tool sessions for new Plan/Task system.
  */
 export async function getToolSession(playStepId: string) {
-  return await prisma.toolSession.findFirst({
-    where: {
-      playStepId,
-      status: {
-        in: [ToolSessionStatus.CREATED, ToolSessionStatus.LAUNCHED],
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+  // Note: New ToolSession model doesn't have playStepId field - it uses taskId
+  // This function is kept for legacy compatibility but will fail with new schema
+  // TODO: Create Task-based version or remove if no longer needed
+  throw new Error('getToolSession for PlayStep is deprecated. Use Task-based tool sessions instead.');
 }
 
 /**
  * Get all tool sessions for a play
+ * @deprecated This function is for legacy Play system. Use Plan-based tool sessions for new Plan/Task system.
  */
 export async function getPlayToolSessions(playId: string) {
-  return await prisma.toolSession.findMany({
-    where: {
-      playId,
-    },
-    orderBy: {
-      createdAt: 'asc',
-    },
-  });
+  // Note: New ToolSession model uses planId, not playId
+  // This function is kept for legacy compatibility but will fail with new schema
+  throw new Error('getPlayToolSessions for Play is deprecated. Use Plan-based tool sessions instead.');
 }
 
 /**
  * Build tool payload from play step context
+ * @deprecated This function is for legacy Play system. Use Task-based tool sessions for new Plan/Task system.
  */
 export async function buildToolPayload(
   playStepId: string,

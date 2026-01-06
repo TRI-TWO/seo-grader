@@ -49,25 +49,59 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    // Step 1: Optionally run audit
+    // Step 1: Read signals (Burnt reads signals, not direct audit)
+    // If runAudit is true, we should read the latest audit signal for the client
     let auditContext: any = null;
     if (runAudit) {
       try {
-        const auditResponse = await fetch(`${req.nextUrl.origin}/api/audit`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ url }),
+        // Find client by URL
+        const { prisma } = await import('@/lib/prisma');
+        const client = await prisma.client.findFirst({
+          where: { canonicalUrl: url },
         });
 
-        if (auditResponse.ok) {
-          const auditData = await auditResponse.json();
-          auditContext = auditData.results;
-          response.audit = auditContext;
+        if (client) {
+          // Read latest audit signal
+          const { getLatestSignal } = await import('@/lib/smokey/signals');
+          const auditSignal = await getLatestSignal(client.id, 'audit_result');
+          
+          if (auditSignal) {
+            auditContext = auditSignal.data;
+            response.audit = auditContext;
+          } else {
+            // No signal yet - run audit to create signal
+            const auditResponse = await fetch(`${req.nextUrl.origin}/api/audit`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ url }),
+            });
+
+            if (auditResponse.ok) {
+              const auditData = await auditResponse.json();
+              auditContext = auditData.results;
+              response.audit = auditContext;
+            }
+          }
+        } else {
+          // No client found - run audit directly (will create signal if client exists)
+          const auditResponse = await fetch(`${req.nextUrl.origin}/api/audit`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url }),
+          });
+
+          if (auditResponse.ok) {
+            const auditData = await auditResponse.json();
+            auditContext = auditData.results;
+            response.audit = auditContext;
+          }
         }
       } catch (error) {
-        console.error('Audit step failed:', error);
+        console.error('Signal read/audit step failed:', error);
         // Continue without audit context
       }
     }

@@ -5,7 +5,7 @@ import {
   processStage3Sync,
   type AuditResults,
 } from "@/lib/auditStagesSync";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, requireAdmin, isClient, canClientAccessAudit } from "@/lib/auth";
 import { hasCapability, getUserPersona } from "@/lib/capabilities/check";
 import { createClient } from "@/lib/supabase/server";
 
@@ -77,15 +77,31 @@ export async function POST(req: NextRequest) {
     const user = await getCurrentUser();
     if (user) {
       // Admin users (mgr@tri-two.com) always have permission
-      const isAdmin = user.email === 'mgr@tri-two.com';
+      const isAdmin = await requireAdmin();
       if (!isAdmin) {
-        const hasAuditCapability = await hasCapability(user.id, 'run_audit');
-        if (!hasAuditCapability) {
-          clearTimeout(timeoutId);
-          return NextResponse.json(
-            { error: 'You do not have permission to run audits. Please upgrade your subscription.' },
-            { status: 403 }
-          );
+        // Check if user is a client
+        const userIsClient = await isClient(user);
+        
+        if (userIsClient) {
+          // Clients can only access audit if allow_audit_free_access = true
+          const canAccess = await canClientAccessAudit(user);
+          if (!canAccess) {
+            clearTimeout(timeoutId);
+            return NextResponse.json(
+              { error: 'Free audit access is not enabled for your account.' },
+              { status: 403 }
+            );
+          }
+        } else {
+          // Non-client, non-admin users need capability
+          const hasAuditCapability = await hasCapability(user.id, 'run_audit');
+          if (!hasAuditCapability) {
+            clearTimeout(timeoutId);
+            return NextResponse.json(
+              { error: 'You do not have permission to run audits. Please upgrade your subscription.' },
+              { status: 403 }
+            );
+          }
         }
       }
     }
@@ -118,6 +134,31 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error('Error storing audit run:', err);
         // Don't fail the request if storage fails
+      }
+    }
+
+    // Create signal from audit results (Audit is fact generator - emits signals)
+    // Find client by URL if possible, otherwise signal will be created without clientId
+    let clientId: string | null = null;
+    if (user) {
+      try {
+        const { prisma } = await import('@/lib/prisma');
+        const client = await prisma.client.findFirst({
+          where: { canonicalUrl: url },
+        });
+        if (client) {
+          clientId = client.id;
+          const { createAuditSignal } = await import('@/lib/smokey/signals');
+          const { logEvent } = await import('@/lib/smokey/events');
+          await createAuditSignal(clientId, stage3, { url, userId: user.id });
+          await logEvent(clientId, 'signal_detected', 'signal', null, {
+            signalType: 'audit_result',
+            source: 'audit',
+          });
+        }
+      } catch (err) {
+        console.error('Error creating audit signal:', err);
+        // Don't fail the request if signal creation fails
       }
     }
 

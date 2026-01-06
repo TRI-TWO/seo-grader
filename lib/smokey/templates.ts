@@ -14,7 +14,7 @@ export type TimelinePhase = {
 };
 
 export const TIMELINE_TEMPLATES: Record<PlanTier, TimelinePhase[]> = {
-  STARTER: [
+  starter: [
     {
       phaseName: 'Initial Audit',
       dayOffset: 0,
@@ -125,7 +125,7 @@ export const TIMELINE_TEMPLATES: Record<PlanTier, TimelinePhase[]> = {
       description: 'Comprehensive annual review and renewal assessment',
     },
   ],
-  GROWTH: [
+  growth: [
     {
       phaseName: 'Initial Audit',
       dayOffset: 0,
@@ -244,7 +244,7 @@ export const TIMELINE_TEMPLATES: Record<PlanTier, TimelinePhase[]> = {
       description: 'Comprehensive annual review and renewal assessment',
     },
   ],
-  ENTERPRISE: [
+  accelerate: [
     {
       phaseName: 'Initial Audit',
       dayOffset: 0,
@@ -375,6 +375,6 @@ export const TIMELINE_TEMPLATES: Record<PlanTier, TimelinePhase[]> = {
 };
 
 export function getTimelineTemplate(planTier: PlanTier): TimelinePhase[] {
-  return TIMELINE_TEMPLATES[planTier] || TIMELINE_TEMPLATES.STARTER;
+  return TIMELINE_TEMPLATES[planTier] || TIMELINE_TEMPLATES.starter;
 }
 

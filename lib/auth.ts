@@ -100,6 +100,49 @@ export async function requireAdmin(): Promise<User | null> {
 }
 
 /**
+ * Check if user is a client (not admin)
+ * Clients can only access audit when allow_audit_free_access = true
+ */
+export async function isClient(user: User): Promise<boolean> {
+  const isAdmin = await requireAdmin()
+  if (isAdmin) {
+    return false // Admin is not a client
+  }
+  
+  // Check if user email matches a client
+  const client = await prisma.client.findFirst({
+    where: { email: user.email || '' },
+  });
+  
+  return !!client;
+}
+
+/**
+ * Get client for a user (if they are a client)
+ */
+export async function getClientForUser(user: User) {
+  if (!user.email) {
+    return null;
+  }
+  
+  return await prisma.client.findFirst({
+    where: { email: user.email },
+  });
+}
+
+/**
+ * Check if client can access audit (free access)
+ */
+export async function canClientAccessAudit(user: User): Promise<boolean> {
+  const client = await getClientForUser(user);
+  if (!client) {
+    return false;
+  }
+  
+  return client.allow_audit_free_access === true;
+}
+
+/**
  * Check if user has a specific capability
  * Smokey users automatically have all capabilities
  */
@@ -130,5 +173,4 @@ export function unauthorizedResponse(message = 'Unauthorized') {
 export function forbiddenResponse(message = 'Forbidden') {
   return NextResponse.json({ error: message }, { status: 403 })
 }
-
 

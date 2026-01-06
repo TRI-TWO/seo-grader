@@ -2,17 +2,17 @@ import { prisma } from '@/lib/prisma';
 import { PlanTier, ClientStatus } from '@prisma/client';
 
 const TIER_LIMITS: Record<PlanTier, { maxPagesPerMonth: number; allowMultiLocation: boolean; allowProgrammatic: boolean }> = {
-  STARTER: {
+  starter: {
     maxPagesPerMonth: 1,
     allowMultiLocation: false,
     allowProgrammatic: false,
   },
-  GROWTH: {
+  growth: {
     maxPagesPerMonth: 3,
     allowMultiLocation: false,
     allowProgrammatic: false,
   },
-  ENTERPRISE: {
+  accelerate: {
     maxPagesPerMonth: 5,
     allowMultiLocation: true,
     allowProgrammatic: true,
@@ -130,6 +130,62 @@ export async function validateSmokeyPreconditions(clientId: string): Promise<{ v
   const contractCheck = await requireActiveContract(clientId);
   if (!contractCheck.valid) {
     return contractCheck;
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Guardrail: Plans can only be created by Smokey via decisions.
+ * This ensures no direct plan creation outside the decision engine.
+ * 
+ * Exception: Admin can override (manual plan creation).
+ */
+export async function validatePlanCreationAuthority(
+  decisionId: string | null | undefined,
+  isAdmin: boolean = false
+): Promise<{ valid: boolean; reason?: string }> {
+  // Admin can override
+  if (isAdmin) {
+    return { valid: true };
+  }
+
+  // Plans must be created via a decision (Smokey's authority)
+  if (!decisionId) {
+    return {
+      valid: false,
+      reason: 'Plans can only be created by Smokey via decisions. No direct plan creation allowed.',
+    };
+  }
+
+  // Verify decision exists
+  const decision = await prisma.decision.findUnique({
+    where: { id: decisionId },
+  });
+
+  if (!decision) {
+    return {
+      valid: false,
+      reason: `Decision ${decisionId} not found. Plans must be created from valid decisions.`,
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Guardrail: No direct execution from audit.
+ * Audit must create signals, which are then processed by Burnt/Smokey.
+ */
+export function validateNoDirectExecutionFromAudit(
+  sourceTool: string,
+  targetTool: string
+): { valid: boolean; reason?: string } {
+  if (sourceTool === 'audit' && (targetTool === 'crimson' || targetTool === 'midnight')) {
+    return {
+      valid: false,
+      reason: 'Direct execution from audit is not allowed. Audit must create signals, which are then processed by Burnt or Smokey.',
+    };
   }
 
   return { valid: true };

@@ -100,9 +100,9 @@ model AuditJob {
 
 // Smokey + Wildcat Models
 enum PlanTier {
-  STARTER
-  GROWTH
-  ENTERPRISE
+  starter
+  growth
+  accelerate
 }
 
 enum ClientStatus {
@@ -175,6 +175,54 @@ enum EmailStatus {
   BOUNCED
 }
 
+// Smokey Play System Enums
+enum PlayType {
+  HOMEPAGE_ELIGIBILITY
+  TRUST_STRUCTURING
+  AI_READABILITY
+  TITLE_SEARCH_RELEVANCE
+  TECHNICAL_FOUNDATIONS
+  IMAGE_ALT_COVERAGE
+  SCHEMA_FOUNDATION
+  AI_MODULARITY
+  ENTITY_COVERAGE
+  TRUST_SIGNALS
+  CRAWL_INDEX
+  STRUCTURE_UX
+}
+
+enum PlayStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  COMPLETED
+  BRANCHED
+  QUEUED
+}
+
+enum StepStatus {
+  LOCKED
+  READY
+  UNLOCKED
+  IN_PROGRESS
+  DONE
+  COMPLETED
+  BLOCKED
+}
+
+enum CheckpointResult {
+  PASS
+  PARTIAL
+  FAIL
+}
+
+enum ToolSessionStatus {
+  CREATED
+  LAUNCHED
+  COMPLETED
+  FAILED
+}
+
 model Lead {
   id            String     @id @default(cuid())
   email         String
@@ -222,24 +270,31 @@ model Payment {
 }
 
 model Client {
-  id                String   @id @default(cuid())
-  email             String
-  companyName       String?
-  canonicalUrl      String
-  planTier          PlanTier @default(STARTER)
-  contractStartDate DateTime
-  contractLengthMonths Int   @default(12)
-  status            ClientStatus @default(ACTIVE)
-  leadId            String?  @unique
-  lead              Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  email                 String
+  companyName           String?
+  canonicalUrl          String
+  planTier              PlanTier @default(starter)
+  contractStartDate     DateTime
+  contractLengthMonths  Int      @default(12)
+  status                ClientStatus @default(ACTIVE)
+  allow_audit_free_access Boolean @default(false)
+  leadId                String?  @unique
+  lead                  Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
   
   contracts        Contract[]
   timelines        ClientTimeline[]
   meetings         Meeting[]
   audits           AuditResult[] // Link to existing audits
   payments         Payment[]
+  plays            Play[] // Legacy - kept temporarily for migration
+  clientConfig     ClientConfig?
+  signals          Signal[]
+  decisions        Decision[]
+  plans            Plan[]
+  events           Event[]
   
   @@index([email])
   @@index([status])
@@ -323,6 +378,247 @@ model EmailLog {
   
   @@index([recipient])
   @@index([sentAt])
+}
+
+// Smokey Play System Models
+model Play {
+  id              String      @id @default(cuid())
+  clientId        String
+  client          Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  playType        PlayType
+  status          PlayStatus  @default(PENDING)
+  currentStep     Int         @default(1) // Current step number (1-5)
+  startedAt       DateTime    @default(now())
+  reassessAfter   DateTime?   // When to reassess after completion
+  branchedFrom    String?     // ID of play this was branched from
+  branchReason    String?     // Reason for branching
+  dependsOnPlayId String?     // ID of play this depends on
+  scheduledMonth  Int?        // Month number (1-N) for UI organization
+  blocking        Boolean     @default(false) // If this play blocks others
+  objective       String?     // Play objective description
+  createdAt       DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  
+  steps           PlayStep[]
+  dependentPlays  Play[]      @relation("PlayDependencies")
+  dependencyPlay  Play?       @relation("PlayDependencies", fields: [dependsOnPlayId], references: [id])
+  toolSessions    ToolSession[]
+  
+  @@index([clientId])
+  @@index([status])
+  @@index([clientId, status]) // For finding active play per client
+  @@index([scheduledMonth])
+  @@index([dependsOnPlayId])
+}
+
+model PlayStep {
+  id                String          @id @default(cuid())
+  playId            String
+  play              Play            @relation(fields: [playId], references: [id], onDelete: Cascade)
+  stepNumber        Int             // 1-5
+  stepCode          String?         // e.g., "1.1", "1.2"
+  title             String?         // Step title/description
+  status            StepStatus      @default(LOCKED)
+  toolSequence      Json            // Array of tool configs: [{tool: "audit", required: true}, ...]
+  executionResults  Json?           // Store tool execution results
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  checkpoint        Checkpoint?
+  toolSessions      ToolSession[]
+  
+  @@unique([playId, stepNumber])
+  @@index([playId])
+  @@index([status])
+}
+
+model Checkpoint {
+  id                String          @id @default(cuid())
+  playStepId        String          @unique
+  playStep          PlayStep        @relation(fields: [playStepId], references: [id], onDelete: Cascade)
+  result            CheckpointResult?
+  evaluatedAt       DateTime?
+  evaluationData    Json?           // Store evaluation details
+  validateWith      String?         // "audit" or "manual"
+  successConditions Json?           // Array of success conditions
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([playStepId])
+}
+
+model ToolSession {
+  id            String            @id @default(cuid())
+  playStepId    String
+  playStep      PlayStep          @relation(fields: [playStepId], references: [id], onDelete: Cascade)
+  playId        String?
+  play          Play?             @relation(fields: [playId], references: [id], onDelete: Cascade)
+  tool          String            // "audit" | "crimson" | "midnight" | "burnt" | "manual"
+  status        ToolSessionStatus @default(CREATED)
+  payload       Json?             // Tool-specific payload
+  launchedAt    DateTime?
+  completedAt   DateTime?
+  results       Json?             // Tool execution results
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  @@index([playStepId])
+  @@index([playId])
+  @@index([status])
+}
+
+model ClientConfig {
+  id                String   @id @default(cuid())
+  clientId          String   @unique
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  parallelPlayLimit Int      @default(1) // WIP limit based on tier
+  tier              PlanTier @default(starter)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([clientId])
+}
+
+// Canonical Platform Tables
+// Signals are immutable facts derived from audits, admin overrides, or system events.
+// Once created, signals cannot be updated or deleted - they represent historical facts.
+// Authority: Only Audit (fact generator), Admin (override), or System can create signals.
+model Signal {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  signalType  String   // "audit_result", "status_change", "metric_threshold", etc.
+  source      String   // "audit", "manual", "system"
+  data        Json     // Signal payload (audit scores, metrics, flags) - IMMUTABLE
+  metadata    Json?    // Additional context - IMMUTABLE
+  createdAt   DateTime @default(now())
+  
+  decisions   Decision[]
+  
+  @@index([clientId])
+  @@index([signalType])
+  @@index([createdAt])
+}
+
+model Decision {
+  id                String   @id @default(cuid())
+  clientId          String
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  signalId          String?  // Signal that triggered this decision
+  signal            Signal?  @relation(fields: [signalId], references: [id], onDelete: SetNull)
+  decisionType      String   // "create_plan", "pause_plan", "branch_plan", etc.
+  reasoning         String?  // Why this decision was made
+  decisionSummary   String?  // Human-readable summary of the decision
+  decisionConfidence Float?  // Confidence score 0.0-1.0 based on signal strength and decision logic
+  metadata          Json?    // Decision context
+  createdAt         DateTime @default(now())
+  
+  plans             Plan[]   // One decision can generate multiple plans
+  
+  @@index([clientId])
+  @@index([signalId])
+  @@index([createdAt])
+}
+
+model Plan {
+  id              String   @id @default(cuid())
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  decisionId      String?
+  decision        Decision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  planType        String   // "title_search_relevance", "technical_foundations", etc.
+  objective       String
+  status          String   @default("pending") // "pending", "active", "paused", "completed", "queued"
+  scheduledMonth  Int?
+  dependsOnPlanId String?
+  dependsOnPlan   Plan?    @relation("PlanDependencies", fields: [dependsOnPlanId], references: [id])
+  dependentPlans  Plan[]   @relation("PlanDependencies")
+  blocking        Boolean  @default(false)
+  startedAt       DateTime @default(now())
+  reassessAfter   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  tasks           Task[]
+  toolSessions    ToolSession[]
+  
+  @@index([clientId])
+  @@index([status])
+  @@index([decisionId])
+  @@index([scheduledMonth])
+}
+
+model Task {
+  id                String   @id @default(cuid())
+  planId            String
+  plan              Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  taskNumber        Int
+  taskCode          String?  // "1.1", "1.2", etc.
+  title             String
+  tool              String   // "audit", "crimson", "midnight", "burnt", "manual"
+  status            String   @default("locked") // "locked", "ready", "in_progress", "done", "blocked"
+  executionResults  Json?
+  hasCheckpoint     Boolean  @default(false) // Only blocking tasks have checkpoints
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  checkpoint        Checkpoint?
+  toolSessions      ToolSession[]
+  
+  @@unique([planId, taskNumber])
+  @@index([planId])
+  @@index([status])
+}
+
+model Checkpoint {
+  id                String   @id @default(cuid())
+  taskId            String   @unique
+  task              Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  result            String?  // "pass", "partial", "fail"
+  evaluatedAt       DateTime?
+  evaluationData    Json?
+  validateWith      String?  // "audit" or "manual"
+  successConditions Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([taskId])
+}
+
+model ToolSession {
+  id            String   @id @default(cuid())
+  taskId        String
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  planId        String?
+  plan          Plan?    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  tool          String
+  status        String   @default("created") // "created", "launched", "completed", "failed"
+  payload       Json?
+  launchedAt    DateTime?
+  completedAt   DateTime?
+  results       Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([taskId])
+  @@index([planId])
+  @@index([status])
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  eventType   String   // "plan_created", "task_completed", "checkpoint_passed", "signal_detected", etc.
+  entityType  String?  // "plan", "task", "checkpoint", "signal", "decision"
+  entityId    String?  // ID of the related entity
+  data        Json?    // Event payload
+  createdAt   DateTime @default(now())
+  
+  @@index([clientId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([entityType, entityId])
 }
 
 // Auth models removed - using Supabase Auth instead

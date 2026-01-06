@@ -2,68 +2,32 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import BrandLogo from "@/components/BrandLogo";
+import HamburgerMenu from "@/components/HamburgerMenu";
 import {
+  runAuditToCrimson,
+  runAuditToMidnight,
   runAuditToBurnt,
+  runCrimsonToMidnight,
+  runCrimsonToBurnt,
+  runMidnightToCrimson,
+  runMidnightToBurnt,
   runBurntOrchestrate,
 } from "@/lib/adminFlows";
 
-const tiles = [
-  {
-    id: 'audit',
-    label: 'Audit',
-    subtitle: 'SEO Scorer',
-    color: '#f5c451',
-    path: '/admin/audit',
-    flows: ['audit-to-burnt'], // Audit → Burnt only (per CTA flow rules)
-  },
-  {
-    id: 'crimson',
-    label: 'Crimson',
-    subtitle: 'Content Engine',
-    color: '#e4572e',
-    path: '/admin/crimson',
-    flows: [], // Execution tools return to Client Database (no forward CTAs)
-  },
-  {
-    id: 'midnight',
-    label: 'Midnight',
-    subtitle: 'Decision Engine',
-    color: '#7bd389',
-    path: '/admin/midnight',
-    flows: [], // Execution tools return to Client Database (no forward CTAs)
-  },
-  {
-    id: 'burnt',
-    label: 'Burnt',
-    subtitle: 'Prioritization',
-    color: '#f29e4c',
-    path: '/admin/burnt',
-    flows: ['burnt-orchestrate'], // Burnt → Crimson/Midnight only
-  },
-  {
-    id: 'smokey',
-    label: 'Smokey',
-    subtitle: 'Planner',
-    color: '#4a5568',
-    path: '/admin/smokey',
-    flows: [],
-  },
-  {
-    id: 'wildcat',
-    label: 'Wildcat',
-    subtitle: 'CRM',
-    color: '#2F80FF',
-    path: '/admin/wildcat',
-    flows: [],
-  },
-];
+type FlowAction = {
+  id: string;
+  label: string;
+  type: 'standalone' | 'chain';
+  handler: () => void;
+};
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [selectedPersona, setSelectedPersona] = useState<'smokey' | 'wildcat' | null>(null);
   
   // Modal/form state
   const [activeFlow, setActiveFlow] = useState<string | null>(null);
@@ -77,13 +41,6 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     checkAdminAccess();
-    // Load persona from sessionStorage on mount
-    if (typeof window !== 'undefined') {
-      const storedPersona = sessionStorage.getItem('admin_persona');
-      if (storedPersona === 'smokey' || storedPersona === 'wildcat') {
-        setSelectedPersona(storedPersona);
-      }
-    }
   }, []);
 
   const checkAdminAccess = async () => {
@@ -96,8 +53,9 @@ export default function AdminDashboard() {
         return;
       }
 
-      // Check if user is admin by email
-      if (user.email !== 'mgr@tri-two.com') {
+      // Check role from user metadata
+      const role = (user.user_metadata?.role as string) || 'VISITOR';
+      if (role !== "ADMIN") {
         router.push("/");
         return;
       }
@@ -111,20 +69,8 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleTileClick = (path: string, e: React.MouseEvent) => {
-    // Primary action: navigate to tool
-    if (e.button === 0 || e.type === 'click') {
-      router.push(path);
-    }
-  };
-
-  const handleTileRightClick = (tile: typeof tiles[0], e: React.MouseEvent) => {
-    e.preventDefault();
-    // Right-click opens flow selector if tile has flows
-    if (tile.flows.length > 0) {
-      // For now, open first flow. Could show a menu to select which flow
-      openFlowModal(tile.flows[0]);
-    }
+  const handleStandalone = (path: string) => {
+    router.push(path);
   };
 
   const handleChainFlow = async (flowId: string) => {
@@ -143,23 +89,57 @@ export default function AdminDashboard() {
       let results: any;
 
       switch (flowId) {
+        case 'audit-to-crimson':
+          if (!goalInput.trim()) {
+            setFlowError("Please enter a goal for Crimson");
+            setFlowLoading(false);
+            return;
+          }
+          results = await runAuditToCrimson(trimmedUrl, goalInput.trim(), tonePresetInput.trim() || undefined);
+          break;
+        
+        case 'audit-to-midnight':
+          results = await runAuditToMidnight(trimmedUrl, modeInput);
+          break;
+        
         case 'audit-to-burnt':
-          // Audit → Burnt (valid CTA flow)
           results = await runAuditToBurnt(trimmedUrl);
           break;
         
-        case 'burnt-orchestrate':
-          // Burnt → Crimson/Midnight (valid CTA flow)
-          results = await runBurntOrchestrate(trimmedUrl);
+        case 'crimson-to-midnight':
+          if (!goalInput.trim()) {
+            setFlowError("Please enter a goal for Crimson");
+            setFlowLoading(false);
+            return;
+          }
+          results = await runCrimsonToMidnight(trimmedUrl, goalInput.trim(), tonePresetInput.trim() || undefined);
           break;
         
-        // Removed invalid flows per CTA flow rules:
-        // - audit-to-crimson (Audit can only route to Burnt)
-        // - audit-to-midnight (Audit can only route to Burnt)
-        // - crimson-to-midnight (Execution tools return to Client Database)
-        // - crimson-to-burnt (Execution tools return to Client Database)
-        // - midnight-to-crimson (Execution tools return to Client Database)
-        // - midnight-to-burnt (Execution tools return to Client Database)
+        case 'crimson-to-burnt':
+          if (!goalInput.trim()) {
+            setFlowError("Please enter a goal for Crimson");
+            setFlowLoading(false);
+            return;
+          }
+          results = await runCrimsonToBurnt(trimmedUrl, goalInput.trim(), tonePresetInput.trim() || undefined);
+          break;
+        
+        case 'midnight-to-crimson':
+          if (!goalInput.trim()) {
+            setFlowError("Please enter a goal for Crimson");
+            setFlowLoading(false);
+            return;
+          }
+          results = await runMidnightToCrimson(trimmedUrl, modeInput, goalInput.trim(), tonePresetInput.trim() || undefined);
+          break;
+        
+        case 'midnight-to-burnt':
+          results = await runMidnightToBurnt(trimmedUrl, modeInput);
+          break;
+        
+        case 'burnt-orchestrate':
+          results = await runBurntOrchestrate(trimmedUrl);
+          break;
         
         default:
           setFlowError("Unknown flow");
@@ -168,6 +148,7 @@ export default function AdminDashboard() {
       }
 
       setFlowResults(results);
+      // Optionally redirect to appropriate page or show results inline
     } catch (err: any) {
       setFlowError(err.message || "An error occurred. Please try again.");
     } finally {
@@ -195,28 +176,19 @@ export default function AdminDashboard() {
   };
 
   const needsGoal = (flowId: string) => {
-    // No flows currently require goal input (burnt-orchestrate handles it internally)
-    return false;
+    return flowId.includes('crimson') || flowId === 'midnight-to-crimson';
   };
 
   const needsMode = (flowId: string) => {
-    // No flows currently require mode input
-    return false;
-  };
-
-  const handlePersonaSelect = (persona: 'smokey' | 'wildcat') => {
-    setSelectedPersona(persona);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('admin_persona', persona);
-    }
+    return flowId.includes('midnight');
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(to bottom, #0b0f1a, #05070d)' }}>
+      <div className="min-h-screen bg-void-black text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: '#2F80FF' }}></div>
-          <p className="text-white">Loading...</p>
+          <p>Loading...</p>
         </div>
       </div>
     );
@@ -227,152 +199,156 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen text-white relative overflow-hidden" style={{ background: 'linear-gradient(to bottom, #0b0f1a, #05070d)' }}>
-      {/* Wave overlay */}
-      <div className="absolute inset-0 opacity-20">
-        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 800" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="adminTopoGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#2F80FF" stopOpacity="0.1" />
-              <stop offset="100%" stopColor="#2F80FF" stopOpacity="0.05" />
-            </linearGradient>
-          </defs>
-          <path d="M0,600 Q300,550 600,580 T1200,600" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.15" />
-          <path d="M0,650 Q300,600 600,630 T1200,650" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.12" />
-          <path d="M0,700 Q300,650 600,680 T1200,700" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.1" />
-          <g opacity="0.08">
-            {Array.from({ length: 15 }).map((_, i) => (
-              <line key={`h-${i}`} x1="0" y1={i * 50} x2="1200" y2={i * 50} stroke="#2F80FF" strokeWidth="0.5" />
-            ))}
-            {Array.from({ length: 20 }).map((_, i) => (
-              <line key={`v-${i}`} x1={i * 60} y1="0" x2={i * 60} y2="800" stroke="#2F80FF" strokeWidth="0.5" />
-            ))}
-          </g>
-        </svg>
-        <svg className="absolute inset-0 w-full h-full opacity-30" viewBox="0 0 1200 800" preserveAspectRatio="none">
-          <path d="M100,400 Q400,300 700,350 T1200,400" stroke="#2F80FF" strokeWidth="1.5" fill="none" opacity="0.4" />
-          <path d="M200,500 Q500,450 800,480 T1200,500" stroke="#2F80FF" strokeWidth="1" fill="none" opacity="0.3" />
-        </svg>
-        <div className="absolute inset-0">
-          {Array.from({ length: 12 }).map((_, i) => {
-            const x = Math.random() * 100;
-            const y = 60 + Math.random() * 40;
-            return (
-              <div
-                key={i}
-                className="absolute rounded-full bg-mint-signal opacity-30"
-                style={{
-                  left: `${x}%`,
-                  top: `${y}%`,
-                  width: '4px',
-                  height: '4px',
-                  boxShadow: '0 0 6px rgba(46, 211, 183, 0.4)',
-                }}
-              />
-            );
-          })}
-        </div>
+    <div className="min-h-screen bg-void-black text-white relative overflow-hidden">
+      <div className="absolute inset-0 opacity-10">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,0.05) 35px, rgba(255,255,255,0.05) 70px)",
+          }}
+        />
       </div>
 
       <div className="relative z-10">
-        <main className="min-h-[calc(100vh-200px)] flex items-center justify-center px-6 py-12">
-          <div className="w-full max-w-6xl">
-            {/* Title */}
-            <h1 className="text-4xl md:text-5xl font-bold mb-12 text-center text-white">
-              ADMIN PAGE
+        <header className="flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
+          <div className="flex-shrink-0">
+            <BrandLogo />
+          </div>
+          <div className="flex-shrink-0">
+            <HamburgerMenu />
+          </div>
+        </header>
+
+        <main className="min-h-[calc(100vh-200px)] px-6 py-12">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-4xl md:text-5xl font-bold mb-8 text-center">
+              Admin Dashboard
             </h1>
+            <p className="text-xl text-cool-ash text-center mb-12">
+              Unified LLM SEO Decision System
+            </p>
 
-            {/* Persona Selector Section */}
-            <div className="mb-16">
-              <div className="text-center mb-6">
-                <h2 className="text-2xl font-semibold text-white mb-2">Operating Mode</h2>
-                <p className="text-cool-ash text-sm max-w-2xl mx-auto">
-                  Choose how you want to operate in the system. This affects context, visibility, and workflows — not data ownership.
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Card 1: Run Audit */}
+              <div className="bg-obsidian rounded-lg border border-steel-gray p-6 hover:border-teal-500 transition-colors">
+                <div className="text-2xl font-bold mb-3" style={{ color: '#2F80FF' }}>
+                  Run Audit
+                </div>
+                <p className="text-cool-ash mb-4 text-sm">
+                  Baseline diagnostics and scoring using Peach audit engine
                 </p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-6">
-                {/* Smokey Card */}
-                <div
-                  onClick={() => handlePersonaSelect('smokey')}
-                  className={`cursor-pointer rounded-lg p-6 min-w-[280px] flex flex-col transition-all ${
-                    selectedPersona === 'smokey' 
-                      ? 'ring-2 ring-white ring-opacity-50 scale-105' 
-                      : 'hover:scale-105'
-                  }`}
-                  style={{
-                    backgroundColor: '#4a5568',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    boxShadow: selectedPersona === 'smokey' 
-                      ? '0 4px 20px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.3)' 
-                      : '0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)',
-                  }}
-                >
-                  <div className="text-2xl font-bold text-white mb-1">
-                    Smokey
-                  </div>
-                  <div className="text-sm text-white opacity-80 mb-3">
-                    Internal Operator
-                  </div>
-                  <div className="text-xs text-white opacity-70">
-                    Full system visibility. No paywalls. Diagnostic and build mode.
-                  </div>
-                </div>
-
-                {/* Wildcat Card */}
-                <div
-                  onClick={() => handlePersonaSelect('wildcat')}
-                  className={`cursor-pointer rounded-lg p-6 min-w-[280px] flex flex-col transition-all ${
-                    selectedPersona === 'wildcat' 
-                      ? 'ring-2 ring-white ring-opacity-50 scale-105' 
-                      : 'hover:scale-105'
-                  }`}
-                  style={{
-                    backgroundColor: '#2F80FF',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    boxShadow: selectedPersona === 'wildcat' 
-                      ? '0 4px 20px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.3)' 
-                      : '0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)',
-                  }}
-                >
-                  <div className="text-2xl font-bold text-white mb-1">
-                    Wildcat
-                  </div>
-                  <div className="text-sm text-white opacity-80 mb-3">
-                    Client Perspective
-                  </div>
-                  <div className="text-xs text-white opacity-70">
-                    Represents how a client would experience workflows and outputs.
-                  </div>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleStandalone('/admin/audit')}
+                    className="w-full px-4 py-2 bg-[#2F80FF] hover:bg-[#2566cc] text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Run Audit (standalone)
+                  </button>
+                  <button
+                    onClick={() => openFlowModal('audit-to-crimson')}
+                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Run Audit → Crimson
+                  </button>
+                  <button
+                    onClick={() => openFlowModal('audit-to-midnight')}
+                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Run Audit → Midnight
+                  </button>
+                  <button
+                    onClick={() => openFlowModal('audit-to-burnt')}
+                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Run Audit → Burnt
+                  </button>
                 </div>
               </div>
-            </div>
 
-            {/* 4 Tiles - Centered */}
-            <div className="flex flex-wrap justify-center gap-8">
-              {tiles.map((tile) => (
-                <div
-                  key={tile.id}
-                  onClick={(e) => handleTileClick(tile.path, e)}
-                  onContextMenu={(e) => handleTileRightClick(tile, e)}
-                  className="cursor-pointer rounded-lg p-8 min-w-[200px] flex flex-col items-center justify-center transition-transform hover:scale-105"
-                  style={{
-                    backgroundColor: tile.color,
-                    boxShadow: `0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)`,
-                  }}
-                >
-                  <div className="text-3xl font-bold text-white mb-2">
-                    {tile.label}
-                  </div>
-                  <div className="text-lg text-white opacity-90">
-                    {tile.subtitle}
-                  </div>
-                  {tile.flows.length > 0 && (
-                    <div className="mt-2 text-xs text-white opacity-70">
-                      Right-click for flows
-                    </div>
-                  )}
+              {/* Card 2: Crimson */}
+              <div className="bg-obsidian rounded-lg border border-steel-gray p-6 hover:border-teal-500 transition-colors">
+                <div className="text-2xl font-bold mb-3" style={{ color: '#2F80FF' }}>
+                  Crimson
                 </div>
-              ))}
+                <p className="text-cool-ash mb-4 text-sm">
+                  Content creation and editing engine
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleStandalone('/admin/crimson')}
+                    className="w-full px-4 py-2 bg-[#2F80FF] hover:bg-[#2566cc] text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Launch Crimson (standalone)
+                  </button>
+                  <button
+                    onClick={() => openFlowModal('crimson-to-midnight')}
+                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Crimson → Midnight
+                  </button>
+                  <button
+                    onClick={() => openFlowModal('crimson-to-burnt')}
+                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Crimson → Burnt
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 3: Midnight */}
+              <div className="bg-obsidian rounded-lg border border-steel-gray p-6 hover:border-teal-500 transition-colors">
+                <div className="text-2xl font-bold mb-3" style={{ color: '#2F80FF' }}>
+                  Midnight
+                </div>
+                <p className="text-cool-ash mb-4 text-sm">
+                  Homepage, structure, and optimization decision engine
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleStandalone('/admin/midnight')}
+                    className="w-full px-4 py-2 bg-[#2F80FF] hover:bg-[#2566cc] text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Launch Midnight (standalone)
+                  </button>
+                  <button
+                    onClick={() => openFlowModal('midnight-to-crimson')}
+                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Midnight → Crimson
+                  </button>
+                  <button
+                    onClick={() => openFlowModal('midnight-to-burnt')}
+                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Midnight → Burnt
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 4: Burnt */}
+              <div className="bg-obsidian rounded-lg border border-steel-gray p-6 hover:border-teal-500 transition-colors">
+                <div className="text-2xl font-bold mb-3" style={{ color: '#2F80FF' }}>
+                  Burnt
+                </div>
+                <p className="text-cool-ash mb-4 text-sm">
+                  System-level synthesis and optimization engine
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleStandalone('/admin/burnt')}
+                    className="w-full px-4 py-2 bg-[#2F80FF] hover:bg-[#2566cc] text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Launch Burnt (standalone)
+                  </button>
+                  <button
+                    onClick={() => openFlowModal('burnt-orchestrate')}
+                    className="w-full px-4 py-2 bg-obsidian border border-steel-gray hover:border-teal-500 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Burnt (orchestrate Audit → Crimson → Midnight)
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </main>

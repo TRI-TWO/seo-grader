@@ -74,11 +74,7 @@ export async function shouldRegenerateTimeline(
   const play = await prisma.play.findUnique({
     where: { id: playId },
     include: {
-      steps: {
-        include: {
-          checkpoint: true,
-        },
-      },
+      steps: true,
     },
   });
 
@@ -86,11 +82,11 @@ export async function shouldRegenerateTimeline(
     return false;
   }
 
-  // Check if all steps are completed with passing checkpoints
+  // Check if all steps are completed
+  // Note: Legacy Play system - checkpoint relation removed
+  // For new Plan/Task system, checkpoints are fetched explicitly
   const allStepsCompleted = play.steps.every(
-    (step) =>
-      step.checkpoint?.result === 'PASS' ||
-      step.status === 'COMPLETED'
+    (step) => step.status === 'COMPLETED'
   );
 
   // Regenerate timeline if play is completed

@@ -402,7 +402,7 @@ model Play {
   steps           PlayStep[]
   dependentPlays  Play[]      @relation("PlayDependencies")
   dependencyPlay  Play?       @relation("PlayDependencies", fields: [dependsOnPlayId], references: [id])
-  toolSessions    ToolSession[]
+  // Legacy model - toolSessions relation removed as new system uses Plan/Task ToolSession
   
   @@index([clientId])
   @@index([status])
@@ -424,45 +424,10 @@ model PlayStep {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   
-  checkpoint        Checkpoint?
-  toolSessions      ToolSession[]
+  // Legacy relations - kept for migration compatibility
+  // Note: New system uses Task/Plan models with their own Checkpoint and ToolSession
   
   @@unique([playId, stepNumber])
-  @@index([playId])
-  @@index([status])
-}
-
-model Checkpoint {
-  id                String          @id @default(cuid())
-  playStepId        String          @unique
-  playStep          PlayStep        @relation(fields: [playStepId], references: [id], onDelete: Cascade)
-  result            CheckpointResult?
-  evaluatedAt       DateTime?
-  evaluationData    Json?           // Store evaluation details
-  validateWith      String?         // "audit" or "manual"
-  successConditions Json?           // Array of success conditions
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
-  @@index([playStepId])
-}
-
-model ToolSession {
-  id            String            @id @default(cuid())
-  playStepId    String
-  playStep      PlayStep          @relation(fields: [playStepId], references: [id], onDelete: Cascade)
-  playId        String?
-  play          Play?             @relation(fields: [playId], references: [id], onDelete: Cascade)
-  tool          String            // "audit" | "crimson" | "midnight" | "burnt" | "manual"
-  status        ToolSessionStatus @default(CREATED)
-  payload       Json?             // Tool-specific payload
-  launchedAt    DateTime?
-  completedAt   DateTime?
-  results       Json?             // Tool execution results
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  
-  @@index([playStepId])
   @@index([playId])
   @@index([status])
 }

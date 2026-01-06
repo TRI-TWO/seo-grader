@@ -14,11 +14,6 @@ const canActivatePlay = canActivatePlan;
 const getQueuedPlays = getQueuedPlans;
 const activateQueuedPlay = activateQueuedPlan;
 
-// Legacy aliases for backward compatibility
-const canActivatePlay = canActivatePlan;
-const getQueuedPlays = getQueuedPlans;
-const activateQueuedPlay = activateQueuedPlan;
-
 /**
  * Get ALL active plays for a client (supports parallel plays)
  */

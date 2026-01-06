@@ -117,8 +117,16 @@ export async function executeTask(
         message: 'Manual intervention required',
       };
     } else {
+      // Type guard: ensure tool is one of the valid execution tools
+      if (!['audit', 'crimson', 'midnight', 'burnt'].includes(tool)) {
+        throw new Error(`Invalid tool type: ${tool}`);
+      }
+      
+      // TypeScript now knows tool is one of the valid values
+      const validTool = tool as 'audit' | 'crimson' | 'midnight' | 'burnt';
+      
       try {
-        const result = await executeTool(tool, clientUrl, executionResults);
+        const result = await executeTool(validTool, clientUrl, executionResults);
         executionResults[tool] = result;
       } catch (error: any) {
         // Required tool failed - throw error

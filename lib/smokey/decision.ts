@@ -125,7 +125,7 @@ export async function createPlay(
   );
 
   // Determine initial status
-  let initialStatus = PlayStatus.PENDING;
+  let initialStatus: PlayStatus = PlayStatus.PENDING;
   if (canActivate.canActivate) {
     initialStatus = PlayStatus.ACTIVE;
   } else {

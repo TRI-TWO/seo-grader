@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
     // Admin users (mgr@tri-two.com) always have permission
     const isAdmin = user.email === 'mgr@tri-two.com';
     
+    // Parse request body early (needed for CTA flow validation)
+    const body: CrimsonAPIRequest = await req.json();
+    
     // CTA Flow Validation: Execution tools (Crimson) can only be called from Burnt or Smokey
     // Admin can override, but for non-admin users, validate CTA flow
     if (!isAdmin) {
@@ -59,9 +62,6 @@ export async function POST(req: NextRequest) {
     
     // Guardrail: Execution tools cannot create plans or decisions
     // This is enforced by not exposing plan/decision creation APIs to execution tools
-
-    // Parse request body
-    const body: CrimsonAPIRequest = await req.json();
     const { url, goal, tonePreset, optionalAuditContext, templateId } = body;
 
     // Validate required fields

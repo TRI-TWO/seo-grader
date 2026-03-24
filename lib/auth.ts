@@ -7,6 +7,11 @@ import { isSmokeyUser, getUserPersona, hasCapability } from '@/lib/capabilities/
 
 export type UserRole = 'ADMIN' | 'VISITOR'
 
+export function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false
+  return email === 'mgr@tri-two.com' || email === 'tri-two@mgr'
+}
+
 /**
  * Get the current authenticated user (server-side)
  */
@@ -92,7 +97,7 @@ export async function requireAdmin(): Promise<User | null> {
   }
   
   // Fallback: Check if user is admin by email (backward compatibility)
-  if (user.email === 'mgr@tri-two.com') {
+  if (isAdminEmail(user.email)) {
     return user
   }
   

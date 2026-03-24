@@ -12,3 +12,4 @@ CREATE POLICY "profiles_update_own"
 ON profiles FOR UPDATE
 USING (id = auth.uid());
 
+

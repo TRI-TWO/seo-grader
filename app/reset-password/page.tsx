@@ -96,7 +96,7 @@ export default function ResetPasswordPage() {
               ) : (
                 <>
                   <p className="text-gray-400 text-sm mb-6 text-center">
-                    Password reset is only available for the authorized account.
+                    Password reset is only available for authorized accounts.
                   </p>
 
                   {error && (
@@ -117,20 +117,14 @@ export default function ResetPasswordPage() {
                         id="email"
                         type="email"
                         value={email}
-                        onChange={(e) => {
-                          // Only allow mgr@tri-two.com
-                          if (e.target.value === "mgr@tri-two.com" || e.target.value === "") {
-                            setEmail(e.target.value);
-                          }
-                        }}
+                        onChange={(e) => setEmail(e.target.value)}
                         required
-                        readOnly
-                        className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent cursor-not-allowed opacity-75"
+                        className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
                         style={{ '--tw-ring-color': '#16b8a6' } as React.CSSProperties}
-                        placeholder="mgr@tri-two.com"
+                        placeholder="mgr@tri-two.com or mjhanratty18@gmail.com"
                       />
                       <p className="text-gray-500 text-xs mt-1">
-                        Only authorized accounts can reset passwords
+                        Allowed emails: mgr@tri-two.com, mjhanratty18@gmail.com
                       </p>
                     </div>
 

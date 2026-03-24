@@ -57,6 +57,22 @@ const tiles = [
     path: '/admin/wildcat',
     flows: [],
   },
+  {
+    id: 'arch',
+    label: 'Arch',
+    subtitle: 'Health',
+    color: '#16b8a6',
+    path: '/admin/arch',
+    flows: [],
+  },
+  {
+    id: 'local',
+    label: 'Local',
+    subtitle: 'Readiness + Maps',
+    color: '#7c3aed',
+    path: '/admin/local',
+    flows: [],
+  },
 ];
 
 export default function AdminDashboard() {

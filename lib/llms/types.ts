@@ -69,6 +69,11 @@ export interface MidnightInput {
 export interface MidnightOutput {
   structureRecommendations: StructureRecommendation[];
   midnightActions: Action[];
+  service_keyword_buckets?: string[];
+  emergency_intent_terms?: string[];
+  city_modifier_sets?: string[];
+  hub_structure_plan?: string[];
+  internal_linking_plan_local?: string[];
   optionalCrimsonArtifacts?: CrimsonOutput; // Only present if mode is route_to_crimson
 }
 

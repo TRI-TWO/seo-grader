@@ -72,6 +72,12 @@ function buildBurntPrompt(input: BurntInput): string {
 2. Confidence: How confident are we this will work? (0-25)
 3. Effort Inverse: How easy is this to implement? (0-25, higher = easier)
 4. Urgency: How time-sensitive is this? (0-25)
+Local-service quality checks to factor into scoring rationale:
+- Service + city entity coverage
+- FAQ completeness
+- Trust signals (reviews, licensing, insurance, years in business)
+- Internal linking strength
+- NAP consistency, embedded map presence, service area references
 
 Total score = sum of all 4 dimensions (0-100)
 
@@ -171,4 +177,5 @@ function getPriorityBand(total: number): PriorityBand {
   if (total >= 40) return 'Opportunistic';
   return 'Backlog';
 }
+
 

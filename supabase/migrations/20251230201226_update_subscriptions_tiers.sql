@@ -12,3 +12,4 @@ SET tier = 'starter' WHERE tier = 'base';
 UPDATE subscriptions 
 SET tier = 'growth' WHERE tier = 'pro';
 
+

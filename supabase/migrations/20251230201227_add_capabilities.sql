@@ -47,3 +47,4 @@ INSERT INTO tier_capabilities (tier, capability_key) VALUES
 ('enterprise', 'multi_page_runs')
 ON CONFLICT DO NOTHING;
 
+

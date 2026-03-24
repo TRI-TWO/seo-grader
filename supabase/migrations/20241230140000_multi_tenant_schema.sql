@@ -145,3 +145,4 @@ CREATE INDEX IF NOT EXISTS idx_audits_created_by ON audits(created_by);
 CREATE INDEX IF NOT EXISTS idx_llm_runs_tenant_id ON llm_runs(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_llm_runs_audit_id ON llm_runs(audit_id);
 
+

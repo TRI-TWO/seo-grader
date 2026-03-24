@@ -31,6 +31,17 @@ export type PlanTemplate = {
   reassessAfterDays: number;
 };
 
+export const LOCAL_SERVICE_DEFAULT_ROADMAP_ORDER = [
+  "Audit + Loom",
+  "Indexation + crawl fixes",
+  "GBP optimization",
+  "Hub restructuring",
+  "Internal linking implementation",
+  "FAQ hub expansion",
+  "Review acquisition system",
+  "Maps tracking cadence",
+] as const;
+
 /**
  * Plan Templates for Smokey Decision Engine
  * Complete set of plan types covering all audit categories

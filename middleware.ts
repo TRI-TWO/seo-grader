@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/middleware';
+import { isAdminEmail } from '@/lib/auth';
 
 export async function middleware(request: NextRequest) {
-  // Protect /admin/* routes
-  if (request.nextUrl.pathname.startsWith('/admin')) {
+  const pathname = request.nextUrl.pathname;
+  const protectedAdmin = pathname.startsWith('/admin');
+  const protectedArch = pathname === '/arch' || pathname.startsWith('/arch/');
+
+  // Protect /admin/* and /arch/* routes
+  if (protectedAdmin || protectedArch) {
     try {
       const { supabase, response } = createClient(request);
       const { data: { user }, error } = await supabase.auth.getUser();
@@ -16,12 +21,11 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(loginUrl);
       }
 
-      // Check if user is admin by email
-      const isAdmin = user.email === 'mgr@tri-two.com';
+      const isAdmin = isAdminEmail(user.email);
 
-      if (!isAdmin) {
-        // Redirect to home if not admin
-        return NextResponse.redirect(new URL('/', request.url));
+      // Admin pages are admin only
+      if (protectedAdmin && !isAdmin) {
+        return NextResponse.redirect(new URL('/arch', request.url));
       }
 
       // Return the response object to ensure cookies are properly handled
@@ -40,6 +44,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin', '/admin/:path*'],
+  matcher: ['/admin', '/admin/:path*', '/arch', '/arch/:path*'],
 };
 

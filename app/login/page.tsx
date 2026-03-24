@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BrandLogo from "@/app/components/BrandLogo";
 import HamburgerMenu from "@/app/components/HamburgerMenu";
+import { isAdminEmail } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,10 +32,10 @@ export default function LoginPage() {
         setLoading(false);
       } else if (data.user) {
         // Check user email and redirect accordingly
-        if (data.user.email === 'mgr@tri-two.com') {
+        if (isAdminEmail(data.user.email)) {
           router.replace('/admin');
         } else {
-          router.replace('/');
+          router.replace('/arch');
         }
         router.refresh();
       } else {

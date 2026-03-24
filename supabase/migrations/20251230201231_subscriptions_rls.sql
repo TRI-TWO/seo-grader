@@ -6,3 +6,4 @@ CREATE POLICY "subscriptions_read_own"
 ON subscriptions FOR SELECT
 USING (user_id = auth.uid());
 
+

@@ -25,7 +25,7 @@ export async function runMidnight(input: MidnightInput): Promise<MidnightOutput>
         messages: [
           {
             role: 'system',
-            content: `You are Midnight, an SEO homepage structure expert. Your role is to analyze homepage structure and either provide layout recommendations or route content editing tasks to Crimson.`,
+            content: `You are Midnight, a local-service homepage structure expert. Prioritize a hub-first strategy (fewer stronger service hubs), avoid thin service-city page spray, and produce local clustering outputs when possible.`,
           },
           {
             role: 'user',
@@ -85,7 +85,8 @@ function buildMidnightPrompt(input: MidnightInput): string {
   }
   
   if (input.mode === 'homepage_edit') {
-    prompt += `Provide structure recommendations for improving the homepage layout, navigation, and information architecture.
+    prompt += `Provide structure recommendations for improving homepage layout and local-service hub clarity.
+Prioritize one strong hub per major service, with city/service-area sections inside hubs by default.
     
 Return your response as JSON with this structure:
 {
@@ -104,10 +105,16 @@ Return your response as JSON with this structure:
       "description": "string",
       "category": "string"
     }
-  ]
+  ],
+  "service_keyword_buckets": ["string"],
+  "emergency_intent_terms": ["string"],
+  "city_modifier_sets": ["string"],
+  "hub_structure_plan": ["string"],
+  "internal_linking_plan_local": ["string"]
 }`;
   } else {
-    prompt += `Analyze the homepage and determine what content should be edited. Route specific content optimization tasks to Crimson.
+    prompt += `Analyze the homepage and determine what content should be edited. Route specific optimization tasks to Crimson.
+Return local-service clustering guidance using hub-first planning.
     
 Return your response as JSON with this structure:
 {
@@ -126,7 +133,12 @@ Return your response as JSON with this structure:
       "description": "string",
       "category": "string"
     }
-  ]
+  ],
+  "service_keyword_buckets": ["string"],
+  "emergency_intent_terms": ["string"],
+  "city_modifier_sets": ["string"],
+  "hub_structure_plan": ["string"],
+  "internal_linking_plan_local": ["string"]
 }`;
   }
 
@@ -142,6 +154,11 @@ function parseMidnightResponse(content: string, input: MidnightInput): Omit<Midn
       return {
         structureRecommendations: parsed.structureRecommendations || [],
         midnightActions: parsed.midnightActions || [],
+        service_keyword_buckets: parsed.service_keyword_buckets || [],
+        emergency_intent_terms: parsed.emergency_intent_terms || [],
+        city_modifier_sets: parsed.city_modifier_sets || [],
+        hub_structure_plan: parsed.hub_structure_plan || [],
+        internal_linking_plan_local: parsed.internal_linking_plan_local || [],
       };
     }
   } catch (error) {
@@ -166,6 +183,12 @@ function parseMidnightResponse(content: string, input: MidnightInput): Omit<Midn
         category: 'structure',
       },
     ],
+    service_keyword_buckets: [],
+    emergency_intent_terms: [],
+    city_modifier_sets: [],
+    hub_structure_plan: [],
+    internal_linking_plan_local: [],
   };
 }
+
 

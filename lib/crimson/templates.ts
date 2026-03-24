@@ -176,3 +176,4 @@ export function buildGoalFromTemplateFields(templateId: string, fieldValues: Rec
   return parts.join(' ') + '.';
 }
 
+

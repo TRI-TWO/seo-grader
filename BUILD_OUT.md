@@ -533,3 +533,4 @@ This build guide covers:
 
 Follow this guide step-by-step to get your SEO Grader v3 application up and running with full Supabase integration.
 
+

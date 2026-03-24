@@ -1,19 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 
+const ALLOWED_RESET_EMAILS = new Set([
+  "mgr@tri-two.com",
+  "mjhanratty18@gmail.com",
+]);
+
 export async function POST(req: NextRequest) {
   try {
     const { email } = await req.json();
+    const normalizedEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
 
-    if (!email) {
+    if (!normalizedEmail) {
       return NextResponse.json(
         { error: "Email is required" },
         { status: 400 }
       );
     }
 
-    // Only allow password reset for mgr@tri-two.com
-    if (email !== "mgr@tri-two.com") {
+    // Only allow password reset for approved accounts
+    if (!ALLOWED_RESET_EMAILS.has(normalizedEmail)) {
       return NextResponse.json(
         { error: "Password reset is only available for authorized accounts." },
         { status: 403 }
@@ -30,11 +37,13 @@ export async function POST(req: NextRequest) {
       console.error("Error listing users:", listError);
     }
     
-    const userExists = users?.some(u => u.email === email);
+    const userExists = users?.some(
+      (u) => (u.email || "").toLowerCase() === normalizedEmail
+    );
     
     if (!userExists) {
       // Don't reveal if user exists, but log for debugging
-      console.log("Password reset requested for non-existent user:", email);
+      console.log("Password reset requested for non-existent user:", normalizedEmail);
       return NextResponse.json({
         success: true,
         message: "If an account exists with this email, a password reset link has been sent.",
@@ -45,7 +54,7 @@ export async function POST(req: NextRequest) {
     // Note: Supabase admin API can generate reset links directly
     const { data: resetData, error: resetError } = await supabase.auth.admin.generateLink({
       type: 'recovery',
-      email: email,
+      email: normalizedEmail,
     });
 
     if (resetError) {
@@ -58,7 +67,7 @@ export async function POST(req: NextRequest) {
         // Try using the regular client method as fallback
         const { createRouteHandlerClient } = await import("@/lib/supabase/server");
         const clientSupabase = createRouteHandlerClient();
-        const { error: altError } = await clientSupabase.auth.resetPasswordForEmail(email, {
+        const { error: altError } = await clientSupabase.auth.resetPasswordForEmail(normalizedEmail, {
           redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password`,
         });
         

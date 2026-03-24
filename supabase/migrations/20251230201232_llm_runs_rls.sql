@@ -24,3 +24,4 @@ CREATE POLICY "llm_runs_delete_own"
 ON llm_runs FOR DELETE
 USING (user_id = auth.uid());
 
+

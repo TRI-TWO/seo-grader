@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase";
+import { sendPasswordResetActionLink } from "@/lib/email";
 
 const ALLOWED_RESET_EMAILS = new Set([
   "mgr@tri-two.com",
   "mjhanratty18@gmail.com",
 ]);
+
+function getPublicOrigin(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+  if (!raw) return "http://localhost:3000";
+  const trimmed = raw.replace(/\/$/, "");
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,7 +33,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Only allow password reset for approved accounts
     if (!ALLOWED_RESET_EMAILS.has(normalizedEmail)) {
       return NextResponse.json(
         { error: "Password reset is only available for authorized accounts." },
@@ -27,91 +40,87 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use service role client for admin operations (can send emails)
-    const supabase = getSupabaseClient();
-    
-    // Check if user exists first
-    const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
-    
-    if (listError) {
-      console.error("Error listing users:", listError);
-    }
-    
-    const userExists = users?.some(
-      (u) => (u.email || "").toLowerCase() === normalizedEmail
-    );
-    
-    if (!userExists) {
-      // Don't reveal if user exists, but log for debugging
-      console.log("Password reset requested for non-existent user:", normalizedEmail);
-      return NextResponse.json({
-        success: true,
-        message: "If an account exists with this email, a password reset link has been sent.",
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const origin = getPublicOrigin();
+    const redirectTo = `${origin}/reset-password/complete`;
+
+    // Primary path: Supabase sends the recovery email (project Auth email / SMTP settings).
+    if (supabaseUrl && anonKey) {
+      const anon = createClient(supabaseUrl, anonKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
       });
-    }
-
-    // Generate password reset link using admin API
-    // Note: Supabase admin API can generate reset links directly
-    const { data: resetData, error: resetError } = await supabase.auth.admin.generateLink({
-      type: 'recovery',
-      email: normalizedEmail,
-    });
-
-    if (resetError) {
-      console.error("Password reset error:", resetError);
-      console.error("Error details:", JSON.stringify(resetError, null, 2));
-      
-      // In development, try alternative method
-      if (process.env.NODE_ENV === 'development') {
-        console.log("Attempting alternative password reset method...");
-        // Try using the regular client method as fallback
-        const { createRouteHandlerClient } = await import("@/lib/supabase/server");
-        const clientSupabase = createRouteHandlerClient();
-        const { error: altError } = await clientSupabase.auth.resetPasswordForEmail(normalizedEmail, {
-          redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password`,
+      const { error: resetErr } = await anon.auth.resetPasswordForEmail(
+        normalizedEmail,
+        { redirectTo }
+      );
+      if (!resetErr) {
+        return NextResponse.json({
+          success: true,
+          message:
+            "If an account exists for this email, a password reset link has been sent.",
         });
-        
-        if (altError) {
-          console.error("Alternative method also failed:", altError);
-        } else {
-          console.log("Password reset email sent via alternative method");
-        }
       }
-      
-      // Always return success (don't reveal if user exists)
+      console.error("resetPasswordForEmail failed:", resetErr);
+    } else {
+      console.error(
+        "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY; cannot send recovery email via Supabase."
+      );
+    }
+
+    // Fallback: generate link with service role and deliver via SendGrid (if configured).
+    const admin = getSupabaseClient();
+    const { data: resetData, error: resetError } =
+      await admin.auth.admin.generateLink({
+        type: "recovery",
+        email: normalizedEmail,
+        options: { redirectTo },
+      });
+
+    if (resetError || !resetData?.properties?.action_link) {
+      console.error("generateLink recovery failed:", resetError);
       return NextResponse.json({
         success: true,
-        message: "If an account exists with this email, a password reset link has been sent.",
+        message:
+          "If an account exists for this email, a password reset link has been sent.",
       });
     }
 
-    // In development, log the reset link
-    if (process.env.NODE_ENV === 'development' && resetData?.properties?.action_link) {
+    const actionLink = resetData.properties.action_link;
+
+    if (process.env.SENDGRID_API_KEY) {
+      try {
+        await sendPasswordResetActionLink(normalizedEmail, actionLink);
+      } catch (e) {
+        console.error("SendGrid send failed:", e);
+      }
+    } else if (process.env.NODE_ENV === "development") {
       console.log("=".repeat(80));
-      console.log("🔗 PASSWORD RESET LINK (Development):");
-      console.log(resetData.properties.action_link);
+      console.log("🔗 PASSWORD RESET LINK (no SendGrid, dev log):");
+      console.log(actionLink);
       console.log("=".repeat(80));
+    } else {
+      console.error(
+        "Recovery link generated but email not sent: configure Supabase Auth email or SENDGRID_API_KEY."
+      );
     }
 
-    // Always return success (don't reveal if user exists)
     return NextResponse.json({
       success: true,
-      message: process.env.NODE_ENV === 'development' 
-        ? "Password reset link generated. Check server console for the link."
-        : "If an account exists with this email, a password reset link has been sent.",
+      message:
+        "If an account exists for this email, a password reset link has been sent.",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Password reset error:", error);
-    console.error("Error stack:", error?.stack);
-    
-    // Always return JSON, never HTML
-    const errorMessage = process.env.NODE_ENV === 'development' 
-      ? `An error occurred: ${error?.message || 'Unknown error'}. Check server logs for details.`
-      : "An error occurred. Please try again.";
-    
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    const errorMessage =
+      process.env.NODE_ENV === "development" && error instanceof Error
+        ? `An error occurred: ${error.message}. Check server logs for details.`
+        : "An error occurred. Please try again.";
+
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

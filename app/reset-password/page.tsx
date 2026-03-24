@@ -8,7 +8,7 @@ import HamburgerMenu from "@/app/components/HamburgerMenu";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("mgr@tri-two.com");
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,12 +78,8 @@ export default function ResetPasswordPage() {
                 <div className="space-y-4">
                   <div className="bg-green-600 border border-green-700 rounded-lg px-4 py-3">
                     <div className="text-white text-sm">
-                      Password reset token has been generated. 
-                      {process.env.NODE_ENV === 'development' && (
-                        <div className="mt-2 text-xs">
-                          Check server console for the reset link (SendGrid may not be configured).
-                        </div>
-                      )}
+                      If this address is registered, we sent a reset link. Check your inbox and
+                      spam folder. The email may take a few minutes to arrive.
                     </div>
                   </div>
                   <Link

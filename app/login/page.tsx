@@ -6,7 +6,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BrandLogo from "@/app/components/BrandLogo";
 import HamburgerMenu from "@/app/components/HamburgerMenu";
-import { isAdminEmail } from "@/lib/auth";
+
+function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return email === "mgr@tri-two.com" || email === "tri-two@mgr";
+}
 
 export default function LoginPage() {
   const router = useRouter();

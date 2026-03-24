@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/middleware';
-import { isAdminEmail } from '@/lib/auth';
+
+function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return email === 'mgr@tri-two.com' || email === 'tri-two@mgr';
+}
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;

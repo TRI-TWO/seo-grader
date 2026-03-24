@@ -2,25 +2,33 @@ import { prisma } from "../lib/prisma";
 import { PlanTier, ClientStatus } from "@prisma/client";
 
 async function seedArchV1() {
-  const client = await prisma.client.upsert({
+  const existingClient = await prisma.client.findFirst({
     where: { email: "mjhanratty18@gmail.com" },
-    update: {
-      companyName: "TRI-TWO",
-      canonicalUrl: "https://tri-two.com",
-      planTier: PlanTier.growth,
-      status: ClientStatus.ACTIVE,
-    },
-    create: {
-      email: "mjhanratty18@gmail.com",
-      companyName: "TRI-TWO",
-      canonicalUrl: "https://tri-two.com",
-      planTier: PlanTier.growth,
-      status: ClientStatus.ACTIVE,
-      contractStartDate: new Date(),
-      contractLengthMonths: 12,
-      allow_audit_free_access: true,
-    },
+    orderBy: { createdAt: "asc" },
   });
+
+  const client = existingClient
+    ? await prisma.client.update({
+        where: { id: existingClient.id },
+        data: {
+          companyName: "TRI-TWO",
+          canonicalUrl: "https://tri-two.com",
+          planTier: PlanTier.growth,
+          status: ClientStatus.ACTIVE,
+        },
+      })
+    : await prisma.client.create({
+        data: {
+          email: "mjhanratty18@gmail.com",
+          companyName: "TRI-TWO",
+          canonicalUrl: "https://tri-two.com",
+          planTier: PlanTier.growth,
+          status: ClientStatus.ACTIVE,
+          contractStartDate: new Date(),
+          contractLengthMonths: 12,
+          allow_audit_free_access: true,
+        },
+      });
 
   await prisma.$executeRawUnsafe(
     `

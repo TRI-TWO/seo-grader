@@ -8,16 +8,42 @@ const ALLOWED_RESET_EMAILS = new Set([
   "mjhanratty18@gmail.com",
 ]);
 
-function getPublicOrigin(): string {
-  const raw =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  if (!raw) return "http://localhost:3000";
-  const trimmed = raw.replace(/\/$/, "");
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    return trimmed;
+/**
+ * Prefer the hostname the user actually used (Vercel: x-forwarded-host) so
+ * reset links are not stuck on localhost when NEXT_PUBLIC_BASE_URL is wrong or unset.
+ */
+function resolvePublicOrigin(req: NextRequest): string {
+  const hostHeader =
+    req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+  const host = hostHeader.split(",")[0].trim();
+  let proto = (req.headers.get("x-forwarded-proto") || "")
+    .split(",")[0]
+    .trim();
+
+  if (host) {
+    if (host.includes("localhost") || host.startsWith("127.")) {
+      return `http://${host}`;
+    }
+    if (proto !== "http" && proto !== "https") {
+      proto = "https";
+    }
+    return `${proto}://${host}`;
   }
-  return `https://${trimmed}`;
+
+  const vercel = process.env.VERCEL_URL?.replace(/\/$/, "");
+  if (vercel) {
+    return `https://${vercel}`;
+  }
+
+  const env = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "");
+  if (env) {
+    if (env.startsWith("http://") || env.startsWith("https://")) {
+      return env;
+    }
+    return `https://${env}`;
+  }
+
+  return "http://localhost:3000";
 }
 
 export async function POST(req: NextRequest) {
@@ -43,7 +69,7 @@ export async function POST(req: NextRequest) {
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const origin = getPublicOrigin();
+    const origin = resolvePublicOrigin(req);
     const redirectTo = `${origin}/reset-password/complete`;
 
     // Primary path: Supabase sends the recovery email (project Auth email / SMTP settings).

@@ -30,7 +30,12 @@ export default function ResetPasswordPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || "An error occurred");
+        setError(
+          data.error ||
+            (response.status === 429
+              ? "Too many attempts. Please wait about one minute and try again."
+              : "An error occurred")
+        );
         setLoading(false);
       } else {
         setSuccess(true);

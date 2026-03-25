@@ -1,24 +1,19 @@
-import sgMail from '@sendgrid/mail';
+import sgMail from "@sendgrid/mail";
+import { Resend } from "resend";
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 }
 
-/** Send a Supabase-generated recovery `action_link` (full URL) via SendGrid. */
-export async function sendPasswordResetActionLink(
-  email: string,
-  actionLink: string
-) {
-  if (!process.env.SENDGRID_API_KEY) {
-    console.error("SENDGRID_API_KEY is not set");
-    throw new Error("Email service not configured");
-  }
+/** True when we can send password-reset links from the app (bypasses Supabase /recover). */
+export function isOutboundResetMailConfigured(): boolean {
+  return Boolean(
+    process.env.RESEND_API_KEY || process.env.SENDGRID_API_KEY
+  );
+}
 
-  const msg = {
-    to: email,
-    from: process.env.SENDGRID_FROM_EMAIL || "mgr@tri-two.com",
-    subject: "Reset Your Password - SEO Grader",
-    html: `
+function passwordResetActionLinkHtml(actionLink: string): string {
+  return `
       <!DOCTYPE html>
       <html>
         <head>
@@ -39,27 +34,11 @@ export async function sendPasswordResetActionLink(
           </div>
         </body>
       </html>
-    `,
-    text: `You requested to reset your password. Open this link to continue: ${actionLink}`,
-  };
-
-  await sgMail.send(msg);
-  console.log("Password reset action link sent to:", email);
+    `;
 }
 
-export async function sendPasswordResetEmail(email: string, resetToken: string) {
-  if (!process.env.SENDGRID_API_KEY) {
-    console.error('SENDGRID_API_KEY is not set');
-    throw new Error('Email service not configured');
-  }
-
-  const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
-
-  const msg = {
-    to: email,
-    from: process.env.SENDGRID_FROM_EMAIL || 'mgr@tri-two.com',
-    subject: 'Reset Your Password - SEO Grader',
-    html: `
+function passwordResetTokenHtml(resetUrl: string): string {
+  return `
       <!DOCTYPE html>
       <html>
         <head>
@@ -81,16 +60,97 @@ export async function sendPasswordResetEmail(email: string, resetToken: string) 
           </div>
         </body>
       </html>
-    `,
-    text: `You requested to reset your password. Click this link to set a new password: ${resetUrl}\n\nThis link will expire in 24 hours.`,
-  };
+    `;
+}
+
+/**
+ * Send a Supabase-generated recovery `action_link` (full URL).
+ * Prefers Resend (RESEND_API_KEY), then SendGrid (SENDGRID_API_KEY).
+ */
+export async function sendPasswordResetActionLink(
+  email: string,
+  actionLink: string
+) {
+  const html = passwordResetActionLinkHtml(actionLink);
+  const text = `You requested to reset your password. Open this link to continue: ${actionLink}`;
+  const subject = "Reset Your Password - SEO Grader";
+
+  if (process.env.RESEND_API_KEY) {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const from =
+      process.env.RESEND_FROM_EMAIL || "TRI-TWO <onboarding@resend.dev>";
+    const { data, error } = await resend.emails.send({
+      from,
+      to: email,
+      subject,
+      html,
+      text,
+    });
+    if (error) {
+      console.error("Resend send failed:", error);
+      throw new Error(error.message || "Resend send failed");
+    }
+    console.log("Password reset action link sent via Resend to:", email, data?.id);
+    return;
+  }
+
+  if (process.env.SENDGRID_API_KEY) {
+    await sgMail.send({
+      to: email,
+      from: process.env.SENDGRID_FROM_EMAIL || "mgr@tri-two.com",
+      subject,
+      html,
+      text,
+    });
+    console.log("Password reset action link sent via SendGrid to:", email);
+    return;
+  }
+
+  console.error("RESEND_API_KEY and SENDGRID_API_KEY are not set");
+  throw new Error("Email service not configured");
+}
+
+export async function sendPasswordResetEmail(email: string, resetToken: string) {
+  const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/reset-password/${resetToken}`;
+  const html = passwordResetTokenHtml(resetUrl);
+  const text = `You requested to reset your password. Click this link to set a new password: ${resetUrl}\n\nThis link will expire in 24 hours.`;
+  const subject = "Reset Your Password - SEO Grader";
+
+  if (process.env.RESEND_API_KEY) {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const from =
+      process.env.RESEND_FROM_EMAIL || "TRI-TWO <onboarding@resend.dev>";
+    const { error } = await resend.emails.send({
+      from,
+      to: email,
+      subject,
+      html,
+      text,
+    });
+    if (error) {
+      throw new Error(error.message || "Resend send failed");
+    }
+    console.log("Password reset email sent via Resend to:", email);
+    return true;
+  }
+
+  if (!process.env.SENDGRID_API_KEY) {
+    console.error("RESEND_API_KEY and SENDGRID_API_KEY are not set");
+    throw new Error("Email service not configured");
+  }
 
   try {
-    await sgMail.send(msg);
-    console.log('Password reset email sent to:', email);
+    await sgMail.send({
+      to: email,
+      from: process.env.SENDGRID_FROM_EMAIL || "mgr@tri-two.com",
+      subject,
+      html,
+      text,
+    });
+    console.log("Password reset email sent to:", email);
     return true;
-  } catch (error: any) {
-    console.error('Error sending email:', error);
+  } catch (error: unknown) {
+    console.error("Error sending email:", error);
     throw error;
   }
 }

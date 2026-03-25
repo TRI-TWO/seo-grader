@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase";
-import { sendPasswordResetActionLink } from "@/lib/email";
+import {
+  isOutboundResetMailConfigured,
+  sendPasswordResetActionLink,
+} from "@/lib/email";
 
 const ALLOWED_RESET_EMAILS = new Set([
   "mgr@tri-two.com",
@@ -85,10 +88,10 @@ export async function POST(req: NextRequest) {
     const redirectTo = `${origin}/reset-password/complete`;
 
     const admin = getSupabaseClient();
-    const sendgridConfigured = Boolean(process.env.SENDGRID_API_KEY);
+    const outboundMail = isOutboundResetMailConfigured();
 
-    // Path A (preferred when SendGrid is set): admin generateLink + our email — does NOT call /recover (avoids email rate limit).
-    if (sendgridConfigured) {
+    // Path A (preferred when Resend or SendGrid on Vercel): admin generateLink + our email — does NOT call /recover (avoids Supabase email rate limit).
+    if (outboundMail) {
       const { data: resetData, error: resetError } =
         await admin.auth.admin.generateLink({
           type: "recovery",
@@ -108,20 +111,23 @@ export async function POST(req: NextRequest) {
               "If an account exists for this email, a password reset link has been sent.",
           });
         } catch (e) {
-          console.error("SendGrid send failed:", e);
+          console.error("Outbound reset email send failed:", e);
           return NextResponse.json(
             {
               error:
-                "Could not send the reset email. Check SendGrid configuration, or set the password in Supabase → Authentication → Users.",
+                "Could not send the reset email. Check RESEND_API_KEY / RESEND_FROM_EMAIL (or SendGrid) on Vercel, or set the password in Supabase → Authentication → Users.",
             },
             { status: 500 }
           );
         }
       }
-      console.error("generateLink recovery failed (SendGrid path):", resetError);
+      console.error(
+        "generateLink recovery failed (outbound mail path):",
+        resetError
+      );
     }
 
-    // Path B: Supabase-hosted email via /recover (rate-limited; only when no SendGrid or generateLink failed above).
+    // Path B: Supabase-hosted email via /recover (rate-limited; only when no outbound mail or generateLink failed above).
     if (supabaseUrl && anonKey) {
       const anon = createClient(supabaseUrl, anonKey, {
         auth: {
@@ -146,7 +152,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Email rate limit: wait several minutes before another reset, or set your password in Supabase → Authentication → Users. If you use SendGrid, add SENDGRID_API_KEY on Vercel to avoid this limit.",
+              "Email rate limit: wait several minutes before another reset, or set your password in Supabase → Authentication → Users. Add RESEND_API_KEY on Vercel to send resets via Resend and avoid this limit.",
           },
           { status: 429 }
         );
@@ -165,8 +171,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Path C: no SendGrid — try generateLink and log in dev only
-    if (!sendgridConfigured) {
+    // Path C: no outbound mail — try generateLink and log in dev only
+    if (!outboundMail) {
       const { data: resetData, error: resetError } =
         await admin.auth.admin.generateLink({
           type: "recovery",
@@ -176,7 +182,7 @@ export async function POST(req: NextRequest) {
       if (!resetError && resetData?.properties?.action_link) {
         if (process.env.NODE_ENV === "development") {
           console.log("=".repeat(80));
-          console.log("🔗 PASSWORD RESET LINK (dev, no SendGrid):");
+          console.log("🔗 PASSWORD RESET LINK (dev, no Resend/SendGrid):");
           console.log(resetData.properties.action_link);
           console.log("=".repeat(80));
           return NextResponse.json({
@@ -191,7 +197,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Could not send a reset link. Add SENDGRID_API_KEY on Vercel (recommended), wait before retrying, or set the password in Supabase → Authentication → Users.",
+          "Could not send a reset link. Add RESEND_API_KEY on Vercel (recommended), wait before retrying, or set the password in Supabase → Authentication → Users.",
       },
       { status: 503 }
     );

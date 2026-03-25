@@ -14,6 +14,7 @@ function isAuthRecoverRateLimited(message: string | undefined): boolean {
   return (
     m.includes("24 seconds") ||
     m.includes("rate limit") ||
+    m.includes("email rate limit") ||
     m.includes("too many requests") ||
     (m.includes("security") && m.includes("only request"))
   );
@@ -83,9 +84,44 @@ export async function POST(req: NextRequest) {
     const origin = resolvePublicOrigin(req);
     const redirectTo = `${origin}/reset-password/complete`;
 
-    let recoverRateLimited = false;
+    const admin = getSupabaseClient();
+    const sendgridConfigured = Boolean(process.env.SENDGRID_API_KEY);
 
-    // Primary path: Supabase sends the recovery email (project Auth email / SMTP settings).
+    // Path A (preferred when SendGrid is set): admin generateLink + our email — does NOT call /recover (avoids email rate limit).
+    if (sendgridConfigured) {
+      const { data: resetData, error: resetError } =
+        await admin.auth.admin.generateLink({
+          type: "recovery",
+          email: normalizedEmail,
+          options: { redirectTo },
+        });
+
+      if (!resetError && resetData?.properties?.action_link) {
+        try {
+          await sendPasswordResetActionLink(
+            normalizedEmail,
+            resetData.properties.action_link
+          );
+          return NextResponse.json({
+            success: true,
+            message:
+              "If an account exists for this email, a password reset link has been sent.",
+          });
+        } catch (e) {
+          console.error("SendGrid send failed:", e);
+          return NextResponse.json(
+            {
+              error:
+                "Could not send the reset email. Check SendGrid configuration, or set the password in Supabase → Authentication → Users.",
+            },
+            { status: 500 }
+          );
+        }
+      }
+      console.error("generateLink recovery failed (SendGrid path):", resetError);
+    }
+
+    // Path B: Supabase-hosted email via /recover (rate-limited; only when no SendGrid or generateLink failed above).
     if (supabaseUrl && anonKey) {
       const anon = createClient(supabaseUrl, anonKey, {
         auth: {
@@ -104,92 +140,13 @@ export async function POST(req: NextRequest) {
             "If an account exists for this email, a password reset link has been sent.",
         });
       }
-      recoverRateLimited = isAuthRecoverRateLimited(resetErr.message);
+      const recoverRateLimited = isAuthRecoverRateLimited(resetErr.message);
       console.error("resetPasswordForEmail failed:", resetErr);
-    } else {
-      console.error(
-        "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY; cannot send recovery email via Supabase."
-      );
-    }
-
-    // Fallback: admin generateLink (bypasses public /recover rate limit) + SendGrid when configured.
-    const admin = getSupabaseClient();
-    const { data: resetData, error: resetError } =
-      await admin.auth.admin.generateLink({
-        type: "recovery",
-        email: normalizedEmail,
-        options: { redirectTo },
-      });
-
-    if (resetError || !resetData?.properties?.action_link) {
-      console.error("generateLink recovery failed:", resetError);
-      if (
-        recoverRateLimited ||
-        isAuthRecoverRateLimited(resetError?.message)
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "Too many reset requests. Please wait about one minute before trying again. If you already asked for a link, check your inbox and spam folder.",
-          },
-          { status: 429 }
-        );
-      }
-      return NextResponse.json({
-        success: true,
-        message:
-          "If an account exists for this email, a password reset link has been sent.",
-      });
-    }
-
-    const actionLink = resetData.properties.action_link;
-
-    if (process.env.SENDGRID_API_KEY) {
-      try {
-        await sendPasswordResetActionLink(normalizedEmail, actionLink);
-        return NextResponse.json({
-          success: true,
-          message:
-            "If an account exists for this email, a password reset link has been sent.",
-        });
-      } catch (e) {
-        console.error("SendGrid send failed:", e);
-        if (recoverRateLimited) {
-          return NextResponse.json(
-            {
-              error:
-                "Too many reset requests from Supabase. Please wait about one minute, then try again.",
-            },
-            { status: 429 }
-          );
-        }
-        return NextResponse.json(
-          {
-            error:
-              "Could not send the reset email. Wait about one minute and try again, or set the password in Supabase → Authentication → Users.",
-          },
-          { status: 500 }
-        );
-      }
-    } else if (process.env.NODE_ENV === "development") {
-      console.log("=".repeat(80));
-      console.log("🔗 PASSWORD RESET LINK (no SendGrid, dev log):");
-      console.log(actionLink);
-      console.log("=".repeat(80));
-      return NextResponse.json({
-        success: true,
-        message:
-          "Password reset link logged to the server console (development).",
-      });
-    } else {
-      console.error(
-        "Recovery link generated but email not sent: configure Supabase Auth email or SENDGRID_API_KEY."
-      );
       if (recoverRateLimited) {
         return NextResponse.json(
           {
             error:
-              "Password reset is temporarily limited. Please wait about one minute and try again, or set your password in the Supabase dashboard under Authentication → Users.",
+              "Email rate limit: wait several minutes before another reset, or set your password in Supabase → Authentication → Users. If you use SendGrid, add SENDGRID_API_KEY on Vercel to avoid this limit.",
           },
           { status: 429 }
         );
@@ -197,15 +154,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Reset link could not be emailed. Configure SENDGRID_API_KEY for fallback delivery, or wait a minute and use Supabase’s built-in recovery again.",
+            resetErr.message ||
+            "Could not send reset email. Try again later or set the password in Supabase → Authentication → Users.",
         },
-        { status: 503 }
+        { status: 400 }
+      );
+    } else {
+      console.error(
+        "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY."
       );
     }
 
+    // Path C: no SendGrid — try generateLink and log in dev only
+    if (!sendgridConfigured) {
+      const { data: resetData, error: resetError } =
+        await admin.auth.admin.generateLink({
+          type: "recovery",
+          email: normalizedEmail,
+          options: { redirectTo },
+        });
+      if (!resetError && resetData?.properties?.action_link) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("=".repeat(80));
+          console.log("🔗 PASSWORD RESET LINK (dev, no SendGrid):");
+          console.log(resetData.properties.action_link);
+          console.log("=".repeat(80));
+          return NextResponse.json({
+            success: true,
+            message:
+              "Password reset link logged to the server console (development).",
+          });
+        }
+      }
+    }
+
     return NextResponse.json(
-      { error: "Unable to complete password reset. Try again shortly." },
-      { status: 500 }
+      {
+        error:
+          "Could not send a reset link. Add SENDGRID_API_KEY on Vercel (recommended), wait before retrying, or set the password in Supabase → Authentication → Users.",
+      },
+      { status: 503 }
     );
   } catch (error: unknown) {
     console.error("Password reset error:", error);

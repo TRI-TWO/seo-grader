@@ -7,7 +7,9 @@ import { createClient } from "@/lib/supabase/client";
 import BrandLogo from "@/app/components/BrandLogo";
 import HamburgerMenu from "@/app/components/HamburgerMenu";
 
-/** Landing page for Supabase recovery emails (`redirectTo`). Handles ?code= (PKCE) then password form. */
+const PKCE_STORAGE_PREFIX = "sb_recovery_pkce_";
+
+/** Landing page for Supabase recovery emails (`redirectTo`). Handles ?code= (PKCE), hash tokens, and Strict Mode double-mount. */
 export default function ResetPasswordCompletePage() {
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -17,24 +19,64 @@ export default function ResetPasswordCompletePage() {
   const [success, setSuccess] = useState(false);
   const [validating, setValidating] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
-
   useEffect(() => {
     const validateSession = async () => {
       try {
         const supabase = createClient();
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
-        if (code) {
-          const { error: exchangeError } =
-            await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeError) {
-            setError(
-              exchangeError.message ||
-                "Invalid or expired reset link. Request a new one."
-            );
+
+        // Hash-based redirect (some Supabase / template configurations)
+        const hash = window.location.hash?.replace(/^#/, "") || "";
+        if (hash) {
+          const hashParams = new URLSearchParams(hash);
+          const access_token = hashParams.get("access_token");
+          const refresh_token = hashParams.get("refresh_token");
+          const hashError = hashParams.get("error_description") || hashParams.get("error");
+          if (hashError) {
+            setError(decodeURIComponent(hashError.replace(/\+/g, " ")));
             setValidating(false);
             return;
           }
+          if (access_token && refresh_token) {
+            const implicitKey = `${PKCE_STORAGE_PREFIX}implicit`;
+            if (!sessionStorage.getItem(implicitKey)) {
+              const { error: setErr } = await supabase.auth.setSession({
+                access_token,
+                refresh_token,
+              });
+              if (setErr) {
+                setError(
+                  setErr.message ||
+                    "Invalid or expired reset link. Request a new one."
+                );
+                setValidating(false);
+                return;
+              }
+              sessionStorage.setItem(implicitKey, "1");
+            }
+            window.history.replaceState(null, "", url.pathname + url.search);
+          }
+        }
+
+        // PKCE: exchange ?code= once (React Strict Mode mounts twice; reusing code causes verify 403)
+        if (code) {
+          const storageKey = `${PKCE_STORAGE_PREFIX}${code}`;
+          const already = sessionStorage.getItem(storageKey);
+          if (!already) {
+            const { error: exchangeError } =
+              await supabase.auth.exchangeCodeForSession(code);
+            if (exchangeError) {
+              setError(
+                exchangeError.message ||
+                  "This reset link was already used or expired. Request a new link and open it once."
+              );
+              setValidating(false);
+              return;
+            }
+            sessionStorage.setItem(storageKey, "1");
+          }
+          window.history.replaceState(null, "", url.pathname);
         }
 
         const {
@@ -52,7 +94,7 @@ export default function ResetPasswordCompletePage() {
           setTokenValid(true);
         } else {
           setError(
-            "Invalid or expired reset token. Please request a new reset link."
+            "Invalid or expired reset link. Request a new link and open it in this browser only once."
           );
         }
       } catch {
@@ -140,6 +182,10 @@ export default function ResetPasswordCompletePage() {
                   <div className="text-white text-sm">{error}</div>
                 </div>
               ) : null}
+              <p className="text-gray-400 text-sm mb-4 text-center">
+                Open the latest email link once. If you refreshed this page, request
+                a new reset from the login page.
+              </p>
               <Link
                 href="/reset-password"
                 className="block text-center text-sm"

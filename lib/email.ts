@@ -5,10 +5,15 @@ if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 }
 
+function trimEnv(value: string | undefined): string | undefined {
+  const t = value?.trim();
+  return t || undefined;
+}
+
 /** True when we can send password-reset links from the app (bypasses Supabase /recover). */
 export function isOutboundResetMailConfigured(): boolean {
   return Boolean(
-    process.env.RESEND_API_KEY || process.env.SENDGRID_API_KEY
+    trimEnv(process.env.RESEND_API_KEY) || trimEnv(process.env.SENDGRID_API_KEY)
   );
 }
 
@@ -75,10 +80,12 @@ export async function sendPasswordResetActionLink(
   const text = `You requested to reset your password. Open this link to continue: ${actionLink}`;
   const subject = "Reset Your Password - SEO Grader";
 
-  if (process.env.RESEND_API_KEY) {
-    const resend = new Resend(process.env.RESEND_API_KEY);
+  const resendKey = trimEnv(process.env.RESEND_API_KEY);
+  if (resendKey) {
+    const resend = new Resend(resendKey);
     const from =
-      process.env.RESEND_FROM_EMAIL || "TRI-TWO <onboarding@resend.dev>";
+      trimEnv(process.env.RESEND_FROM_EMAIL) ||
+      "TRI-TWO <onboarding@resend.dev>";
     const { data, error } = await resend.emails.send({
       from,
       to: email,
@@ -94,7 +101,7 @@ export async function sendPasswordResetActionLink(
     return;
   }
 
-  if (process.env.SENDGRID_API_KEY) {
+  if (trimEnv(process.env.SENDGRID_API_KEY)) {
     await sgMail.send({
       to: email,
       from: process.env.SENDGRID_FROM_EMAIL || "mgr@tri-two.com",
@@ -116,10 +123,12 @@ export async function sendPasswordResetEmail(email: string, resetToken: string) 
   const text = `You requested to reset your password. Click this link to set a new password: ${resetUrl}\n\nThis link will expire in 24 hours.`;
   const subject = "Reset Your Password - SEO Grader";
 
-  if (process.env.RESEND_API_KEY) {
-    const resend = new Resend(process.env.RESEND_API_KEY);
+  const resendKeyLegacy = trimEnv(process.env.RESEND_API_KEY);
+  if (resendKeyLegacy) {
+    const resend = new Resend(resendKeyLegacy);
     const from =
-      process.env.RESEND_FROM_EMAIL || "TRI-TWO <onboarding@resend.dev>";
+      trimEnv(process.env.RESEND_FROM_EMAIL) ||
+      "TRI-TWO <onboarding@resend.dev>";
     const { error } = await resend.emails.send({
       from,
       to: email,
@@ -134,7 +143,7 @@ export async function sendPasswordResetEmail(email: string, resetToken: string) 
     return true;
   }
 
-  if (!process.env.SENDGRID_API_KEY) {
+  if (!trimEnv(process.env.SENDGRID_API_KEY)) {
     console.error("RESEND_API_KEY and SENDGRID_API_KEY are not set");
     throw new Error("Email service not configured");
   }

@@ -111,11 +111,13 @@ export async function POST(req: NextRequest) {
               "If an account exists for this email, a password reset link has been sent.",
           });
         } catch (e) {
+          const detail = e instanceof Error ? e.message : String(e);
           console.error("Outbound reset email send failed:", e);
           return NextResponse.json(
             {
               error:
-                "Could not send the reset email. Check RESEND_API_KEY / RESEND_FROM_EMAIL (or SendGrid) on Vercel, or set the password in Supabase → Authentication → Users.",
+                "Could not send the reset email. Check Resend (API key, verified domain, from-address) on Vercel, or set the password in Supabase → Authentication → Users.",
+              detail,
             },
             { status: 500 }
           );

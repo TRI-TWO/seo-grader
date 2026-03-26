@@ -10,6 +10,8 @@ import {
 } from '@/lib/smokey/planEngine';
 import { getQueuedPlans } from '@/lib/smokey/parallel';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   const user = await requireAdmin();
   if (!user) {

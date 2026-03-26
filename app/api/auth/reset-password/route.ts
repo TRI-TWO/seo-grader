@@ -23,11 +23,33 @@ function isAuthRecoverRateLimited(message: string | undefined): boolean {
   );
 }
 
+function trimEnv(value: string | undefined): string | undefined {
+  const t = value?.trim();
+  return t || undefined;
+}
+
+/** Normalize NEXT_PUBLIC_BASE_URL (trim slash, add scheme if host-only). */
+function originFromNextPublicBaseUrl(): string | undefined {
+  const raw = trimEnv(process.env.NEXT_PUBLIC_BASE_URL);
+  if (!raw) return undefined;
+  const env = raw.replace(/\/$/, "");
+  if (env.startsWith("http://") || env.startsWith("https://")) {
+    return env;
+  }
+  return `https://${env}`;
+}
+
 /**
- * Prefer the hostname the user actually used (Vercel: x-forwarded-host) so
- * reset links are not stuck on localhost when NEXT_PUBLIC_BASE_URL is wrong or unset.
+ * Canonical redirect origin for Supabase recovery links.
+ * Prefer NEXT_PUBLIC_BASE_URL when set (production on Vercel). Otherwise infer from the
+ * request (x-forwarded-host / host), with a guard so Vercel never uses a bogus localhost Host.
  */
 function resolvePublicOrigin(req: NextRequest): string {
+  const fromEnv = originFromNextPublicBaseUrl();
+  if (fromEnv) {
+    return fromEnv;
+  }
+
   const hostHeader =
     req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
   const host = hostHeader.split(",")[0].trim();
@@ -35,7 +57,12 @@ function resolvePublicOrigin(req: NextRequest): string {
     .split(",")[0]
     .trim();
 
-  if (host) {
+  const isLoopbackHost =
+    Boolean(host) &&
+    (host.includes("localhost") || host.startsWith("127."));
+  const onVercel = process.env.VERCEL === "1";
+
+  if (host && !(onVercel && isLoopbackHost)) {
     if (host.includes("localhost") || host.startsWith("127.")) {
       return `http://${host}`;
     }
@@ -48,14 +75,6 @@ function resolvePublicOrigin(req: NextRequest): string {
   const vercel = process.env.VERCEL_URL?.replace(/\/$/, "");
   if (vercel) {
     return `https://${vercel}`;
-  }
-
-  const env = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "");
-  if (env) {
-    if (env.startsWith("http://") || env.startsWith("https://")) {
-      return env;
-    }
-    return `https://${env}`;
   }
 
   return "http://localhost:3000";

@@ -11,6 +11,8 @@ import {
 } from '@/lib/smokey/decision';
 import { PlayType } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   const user = await requireAdmin();
   if (!user) {

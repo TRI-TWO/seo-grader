@@ -26,6 +26,8 @@ enum CheckpointResult {
   FAIL = 'FAIL',
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { playId: string } }

@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getLatestArchSnapshots } from "@/lib/arch/snapshots";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const user = await requireAdmin();
   if (!user) {

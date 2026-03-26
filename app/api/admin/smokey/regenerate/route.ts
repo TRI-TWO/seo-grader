@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { regenerateTimeline } from '@/lib/smokey/scheduler';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   const user = await requireAdmin();
   if (!user) {

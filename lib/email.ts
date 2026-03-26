@@ -10,6 +10,20 @@ function trimEnv(value: string | undefined): string | undefined {
   return t || undefined;
 }
 
+/** Resend requires `email@x` or `Name <email@x>`. Strip accidental wrapping quotes from Vercel/env UI pastes. */
+function resolveResendFrom(): string {
+  let raw = trimEnv(process.env.RESEND_FROM_EMAIL);
+  if (raw) {
+    if (
+      (raw.startsWith('"') && raw.endsWith('"')) ||
+      (raw.startsWith("'") && raw.endsWith("'"))
+    ) {
+      raw = raw.slice(1, -1).trim() || undefined;
+    }
+  }
+  return raw || "TRI-TWO <onboarding@resend.dev>";
+}
+
 /** True when we can send password-reset links from the app (bypasses Supabase /recover). */
 export function isOutboundResetMailConfigured(): boolean {
   return Boolean(
@@ -83,9 +97,7 @@ export async function sendPasswordResetActionLink(
   const resendKey = trimEnv(process.env.RESEND_API_KEY);
   if (resendKey) {
     const resend = new Resend(resendKey);
-    const from =
-      trimEnv(process.env.RESEND_FROM_EMAIL) ||
-      "TRI-TWO <onboarding@resend.dev>";
+    const from = resolveResendFrom();
     const { data, error } = await resend.emails.send({
       from,
       to: email,
@@ -126,9 +138,7 @@ export async function sendPasswordResetEmail(email: string, resetToken: string) 
   const resendKeyLegacy = trimEnv(process.env.RESEND_API_KEY);
   if (resendKeyLegacy) {
     const resend = new Resend(resendKeyLegacy);
-    const from =
-      trimEnv(process.env.RESEND_FROM_EMAIL) ||
-      "TRI-TWO <onboarding@resend.dev>";
+    const from = resolveResendFrom();
     const { error } = await resend.emails.send({
       from,
       to: email,

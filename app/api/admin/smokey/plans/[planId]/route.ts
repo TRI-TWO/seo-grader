@@ -8,6 +8,8 @@ import {
 import { executeTask } from '@/lib/smokey/taskExecutor';
 import { evaluateCheckpoint, evaluateCheckpointWithAudit, manualCheckpointEvaluation } from '@/lib/smokey/checkpoints';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { planId: string } }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { createToolSession, launchToolSession, buildToolPayload } from '@/lib/smokey/toolSessions';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   const user = await requireAdmin();
   if (!user) {

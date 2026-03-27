@@ -1,9 +1,21 @@
 import { ArchShell } from "@/components/arch/arch-shell";
+import { ArchPortalNotLinked } from "@/components/arch/arch-portal-not-linked";
 import { ArchCard } from "@/components/arch/arch-card";
 import { getArchOverview } from "@/lib/arch/get-arch-overview";
+import { getArchPortalGate } from "@/lib/arch/arch-portal-gate";
 import { redirect } from "next/navigation";
 
 export default async function ArchAccountPage() {
+  const gate = await getArchPortalGate();
+  if (gate.kind === "unauthenticated") redirect("/login");
+  if (gate.kind === "no_client") {
+    return (
+      <ArchShell title="Account" subtitle="Account not linked">
+        <ArchPortalNotLinked email={gate.user.email ?? null} />
+      </ArchShell>
+    );
+  }
+
   const vm = await getArchOverview();
   if (!vm) redirect("/login");
 

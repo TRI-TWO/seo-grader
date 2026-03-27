@@ -58,23 +58,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create corresponding User record in Prisma for business data linking
     try {
-      const user = await prisma.user.create({
-        data: {
-          id: authUser.user.id, // Use Supabase UUID
-          email: authUser.user.email!,
-          role: role as "ADMIN" | "VISITOR",
+      await prisma.profiles.upsert({
+        where: { user_id: authUser.user.id },
+        create: {
+          user_id: authUser.user.id,
+          display_name: authUser.user.email ?? null,
+          is_platform_admin: role === 'ADMIN',
+        },
+        update: {
+          is_platform_admin: role === 'ADMIN',
         },
       });
 
       return NextResponse.json({
         success: true,
-        message: "User created successfully",
+        message: 'User created successfully',
         user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
+          id: authUser.user.id,
+          email: authUser.user.email,
+          role,
         },
       });
     } catch (dbError: any) {

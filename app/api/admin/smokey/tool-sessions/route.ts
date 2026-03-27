@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { createToolSession, launchToolSession, buildToolPayload } from '@/lib/smokey/toolSessions';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,44 +8,11 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  try {
-    const body = await req.json();
-    const { action, taskId, tool, payload } = body;
-
-    if (action === 'create') {
-      if (!taskId || !tool) {
-        return NextResponse.json(
-          { error: 'taskId and tool are required' },
-          { status: 400 }
-        );
-      }
-
-      // Build payload if not provided
-      const finalPayload = payload || await buildToolPayload(taskId, tool);
-      const session = await createToolSession(taskId, tool, finalPayload);
-      return NextResponse.json({ session });
-    } else if (action === 'launch') {
-      const { sessionId } = body;
-      if (!sessionId) {
-        return NextResponse.json(
-          { error: 'sessionId is required' },
-          { status: 400 }
-        );
-      }
-
-      const result = await launchToolSession(sessionId);
-      return NextResponse.json(result);
-    } else {
-      return NextResponse.json(
-        { error: 'Invalid action. Use "create" or "launch"' },
-        { status: 400 }
-      );
-    }
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || 'Failed to process request' },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(
+    {
+      error:
+        'Tool sessions API is not available in this build. Use `public.tool_sessions` or `smokey_tool_sessions` via Prisma.',
+    },
+    { status: 501 }
+  );
 }

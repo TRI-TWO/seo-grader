@@ -7,15 +7,512 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id            String                @id // Supabase auth.users.id (UUID)
-  email         String                @unique
-  role          UserRole              @default(VISITOR)
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  audits        AuditResult[]
-  appointments  CalendlyAppointment[]
-  subscriptions UserSubscription[]
+model AuditJob {
+  id           String    @id @db.Uuid
+  url          String
+  status       String
+  stage        Int?      @map("stage")
+  results      Json?     @map("results")
+  errorMessage String?   @map("error_message")
+  partialAudit Boolean?  @map("partial_audit")
+  createdAt    DateTime? @map("created_at")
+  updatedAt    DateTime? @map("updated_at")
+
+  @@index([status], map: "idx_audit_jobs_status")
+  @@index([url, status, createdAt], map: "idx_audit_jobs_url_status_created")
+  @@map("audit_jobs")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model checkpoints {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plan_id            String    @db.Uuid
+  after_task_id      String?   @db.Uuid
+  validate_with      String
+  success_conditions Json
+  failure_actions    Json
+  result             String?
+  evaluated_at       DateTime? @db.Timestamp(6)
+  created_at         DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model client_performance_signals {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id        String    @db.Uuid
+  seo_health       String
+  content_velocity String
+  paid_dependency  String
+  conversion_trend String
+  source           String
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model clients {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org_id      String   @db.Uuid
+  name        String
+  industry    String?
+  website_url String?
+  timezone    String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([org_id], map: "idx_clients_org_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model content_assets {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org_id       String       @db.Uuid
+  client_id    String?      @db.Uuid
+  site_id      String?      @db.Uuid
+  llm_run_id   String?      @db.Uuid
+  content_type content_type @default(blog)
+  title        String?
+  slug         String?
+  status       String       @default("draft")
+  markdown     String?
+  html         String?
+  metadata     Json         @default("{}")
+  created_at   DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([llm_run_id], map: "idx_content_assets_llm_run_id")
+  @@index([org_id], map: "idx_content_assets_org_id")
+  @@index([site_id], map: "idx_content_assets_site_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model decisions {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id     String    @db.Uuid
+  site_id       String?   @db.Uuid
+  decision_type String
+  summary       String
+  confidence    Decimal   @db.Decimal(3, 2)
+  evidence      Json
+  status        String    @default("open")
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  updated_at    DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model email_outbox {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org_id              String    @db.Uuid
+  audit_id            String?   @db.Uuid
+  llm_run_id          String?   @db.Uuid
+  to_email            String
+  subject             String
+  body_text           String?
+  body_html           String?
+  status              String    @default("queued")
+  provider            String    @default("smtp")
+  provider_message_id String?
+  last_error          String?
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  sent_at             DateTime? @db.Timestamptz(6)
+
+  @@index([org_id], map: "idx_email_outbox_org_id")
+  @@index([status], map: "idx_email_outbox_status")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model events {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id  String?   @db.Uuid
+  event_type String
+  payload    Json
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model llm_artifacts {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  llm_run_id   String        @db.Uuid
+  type         artifact_type
+  label        String?
+  content_text String?
+  content_json Json?
+  url          String?
+  created_at   DateTime      @default(now()) @db.Timestamptz(6)
+
+  @@index([llm_run_id], map: "idx_llm_artifacts_run_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model llm_presets {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org_id            String    @db.Uuid
+  agent             llm_agent
+  name              String
+  is_default        Boolean   @default(false)
+  model             String
+  temperature       Decimal   @default(0.7) @db.Decimal
+  top_p             Decimal   @default(1.0) @db.Decimal
+  max_output_tokens Int?
+  system_prompt     String
+  style_notes       String?
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([org_id, agent], map: "idx_llm_presets_org_agent")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model llm_runs {
+  id                      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org_id                  String         @db.Uuid
+  audit_id                String?        @db.Uuid
+  site_id                 String?        @db.Uuid
+  agent                   llm_agent
+  status                  llm_run_status @default(queued)
+  requested_by_user_id    String?        @db.Uuid
+  triggered_by            String         @default("manual")
+  preset_id               String?        @db.Uuid
+  model_used              String?
+  seo_intent              seo_intent?
+  primary_keyword         String?
+  secondary_keywords      String[]       @default([])
+  input                   Json           @default("{}")
+  output                  Json           @default("{}")
+  error_message           String?
+  usage_prompt_tokens     Int?
+  usage_completion_tokens Int?
+  usage_total_tokens      Int?
+  estimated_cost_usd      Decimal?       @db.Decimal
+  started_at              DateTime?      @db.Timestamptz(6)
+  completed_at            DateTime?      @db.Timestamptz(6)
+  created_at              DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime       @default(now()) @db.Timestamptz(6)
+
+  @@index([audit_id, agent], map: "idx_llm_runs_audit_agent")
+  @@index([created_at(sort: Desc)], map: "idx_llm_runs_created_at")
+  @@index([org_id], map: "idx_llm_runs_org_id")
+  @@index([status], map: "idx_llm_runs_status")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model org_members {
+  org_id     String      @db.Uuid
+  user_id    String      @db.Uuid
+  role       member_role @default(viewer)
+  created_at DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@id([org_id, user_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model organizations {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model payments {
+  id                   String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org_id               String         @db.Uuid
+  client_id            String?        @db.Uuid
+  audit_id             String?        @db.Uuid
+  user_id              String?        @db.Uuid
+  provider             String         @default("square")
+  provider_checkout_id String?
+  provider_payment_id  String?
+  plan                 plan_tier      @default(pay_per_report)
+  amount_cents         Int
+  currency             String         @default("USD")
+  status               payment_status @default(initiated)
+  paid_at              DateTime?      @db.Timestamptz(6)
+  metadata             Json           @default("{}")
+  created_at           DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime       @default(now()) @db.Timestamptz(6)
+
+  @@index([audit_id], map: "idx_payments_audit_id")
+  @@index([org_id], map: "idx_payments_org_id")
+  @@index([status], map: "idx_payments_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model plans {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id           String    @db.Uuid
+  site_id             String?   @db.Uuid
+  decision_id         String?   @db.Uuid
+  plan_type           String
+  objective           String
+  month_index         Int
+  status              String    @default("queued")
+  blocking            Boolean   @default(true)
+  reassess_after_days Int       @default(14)
+  next_reassess_at    DateTime? @db.Timestamp(6)
+  depends_on_plan_id  String?   @db.Uuid
+  created_at          DateTime? @default(now()) @db.Timestamp(6)
+  updated_at          DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model profiles {
+  user_id           String   @id @db.Uuid
+  display_name      String?
+  is_platform_admin Boolean  @default(false)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model report_sections {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  template_id  String   @db.Uuid
+  key          String
+  label        String
+  sort_order   Int      @default(0)
+  is_paywalled Boolean  @default(false)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([template_id, key])
+  @@index([template_id], map: "idx_report_sections_template_id")
+}
+
+model report_templates {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key        String   @unique
+  name       String
+  version    String   @default("v1")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model signals {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id   String    @db.Uuid
+  site_id     String?   @db.Uuid
+  signal_type String
+  payload     Json
+  source      String
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model sites {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id     String   @db.Uuid
+  canonical_url String
+  display_name  String?
+  notes         String?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([client_id, canonical_url])
+  @@index([client_id], map: "idx_sites_client_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_action_timeline {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id        String    @db.Uuid
+  month_index      Int
+  focus_area       String?
+  recommended_tool String?
+  action_summary   String?
+  priority         Int?
+  completed        Boolean?  @default(false)
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_alerts {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id     String    @db.Uuid
+  alert_type    String?
+  alert_message String?
+  severity      String?
+  resolved      Boolean?  @default(false)
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_checkpoints {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id          String    @db.Uuid
+  play_id            String    @db.Uuid
+  after_step_id      String?   @db.Uuid
+  validate_with      String
+  success_conditions Json
+  failure_actions    Json
+  result             String?
+  result_notes       String?
+  evaluated_at       DateTime? @db.Timestamp(6)
+  created_at         DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_client_config {
+  client_id                String    @id @db.Uuid
+  contract_level           String
+  contract_price_usd       Int
+  contract_duration_months Int
+  contract_start           DateTime  @db.Date
+  contract_end             DateTime  @db.Date
+  parallel_play_limit      Int       @default(1)
+  smokey_version           String    @default("2.0")
+  created_at               DateTime? @default(now()) @db.Timestamp(6)
+  updated_at               DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_client_state {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id               String    @db.Uuid
+  contract_tier           String?
+  contract_start          DateTime  @db.Date
+  contract_end            DateTime  @db.Date
+  risk_level              String?
+  execution_confidence    Decimal?  @db.Decimal(3, 2)
+  renewal_probability     Decimal?  @db.Decimal(3, 2)
+  paid_dependency_risk    Decimal?  @db.Decimal(3, 2)
+  organic_growth_capacity Decimal?  @db.Decimal(3, 2)
+  next_best_action        String?
+  escalation_required     Boolean?  @default(false)
+  smokey_version          String?
+  last_evaluated_at       DateTime? @default(now()) @db.Timestamp(6)
+  created_at              DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_decisions {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id     String    @db.Uuid
+  decision_type String
+  summary       String
+  confidence    Decimal   @db.Decimal(3, 2)
+  evidence      Json
+  status        String    @default("open")
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  updated_at    DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_events {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id  String    @db.Uuid
+  event_type String
+  payload    Json
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_plays {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id           String    @db.Uuid
+  decision_id         String    @db.Uuid
+  play_type           String
+  play_name           String
+  objective           String
+  allowed_tools       String[]
+  month_index         Int
+  status              String    @default("queued")
+  blocking            Boolean   @default(true)
+  reassess_after_days Int       @default(14)
+  next_reassess_at    DateTime? @db.Timestamp(6)
+  depends_on_play_id  String?   @db.Uuid
+  created_at          DateTime? @default(now()) @db.Timestamp(6)
+  updated_at          DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_signals {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id   String    @db.Uuid
+  signal_type String
+  payload     Json
+  source      String
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_steps {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id           String    @db.Uuid
+  play_id             String    @db.Uuid
+  step_code           String
+  step_order          Int
+  tool                String
+  title               String
+  instructions        Json
+  completion_criteria Json
+  blocking            Boolean   @default(false)
+  status              String    @default("locked")
+  completed_at        DateTime? @db.Timestamp(6)
+  created_at          DateTime? @default(now()) @db.Timestamp(6)
+  updated_at          DateTime? @default(now()) @db.Timestamp(6)
+
+  @@unique([play_id, step_code])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model smokey_tool_sessions {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id      String    @db.Uuid
+  play_id        String?   @db.Uuid
+  step_id        String?   @db.Uuid
+  tool           String
+  launch_payload Json
+  status         String    @default("created")
+  created_at     DateTime? @default(now()) @db.Timestamp(6)
+  updated_at     DateTime? @default(now()) @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model tasks {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plan_id             String    @db.Uuid
+  task_code           String
+  task_order          Int
+  tool                String
+  title               String
+  instructions        Json
+  completion_criteria Json
+  blocking            Boolean   @default(false)
+  status              String    @default("locked")
+  completed_at        DateTime? @db.Timestamp(6)
+  created_at          DateTime? @default(now()) @db.Timestamp(6)
+  updated_at          DateTime? @default(now()) @db.Timestamp(6)
+
+  @@unique([plan_id, task_code])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model tool_sessions {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id      String    @db.Uuid
+  plan_id        String?   @db.Uuid
+  task_id        String?   @db.Uuid
+  tool           String
+  launch_payload Json
+  status         String    @default("created")
+  created_at     DateTime? @default(now()) @db.Timestamp(6)
+  updated_at     DateTime? @default(now()) @db.Timestamp(6)
 }
 
 enum UserRole {
@@ -23,82 +520,6 @@ enum UserRole {
   VISITOR
 }
 
-model AuditResult {
-  id                        String                @id @default(cuid())
-  url                       String
-  userEmail                 String
-  user                      User?                 @relation(fields: [userEmail], references: [email])
-  clientId                   String?
-  client                     Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  isPaid                    Boolean               @default(false)
-  hasAppointment            Boolean               @default(false)
-  rawSeoJson                Json
-  llmSummary                String?
-  contentGrade              String?
-  competitorJson            Json?
-  articleIdeas              Json?
-  companyName               String?
-  titleSearchRelevanceScore Int?
-  technicalFoundationsScore Int?
-  aiOptimizationScore       Int?
-  contentSemanticsScore     Int?
-  mediaOptimizationScore    Int?
-  crawlabilityIndexScore    Int?
-  createdAt                 DateTime              @default(now())
-  appointments              CalendlyAppointment[]
-  leads                     Lead[]
-  
-  @@index([clientId])
-}
-
-model CalendlyAppointment {
-  id              String       @id @default(cuid())
-  calendlyEventId String       @unique
-  url             String
-  userEmail       String
-  user            User?        @relation(fields: [userEmail], references: [email])
-  scheduledAt     DateTime
-  status          String
-  auditId         String?
-  audit           AuditResult? @relation(fields: [auditId], references: [id])
-  createdAt       DateTime     @default(now())
-}
-
-model SubscriptionPlan {
-  id            String             @id @default(cuid())
-  name          String
-  stripeProductId String?
-  stripePriceId String?
-  priceCents    Int
-  subscriptions UserSubscription[]
-}
-
-model UserSubscription {
-  id                 String           @id @default(cuid())
-  userId             String
-  user               User             @relation(fields: [userId], references: [id])
-  subscriptionPlanId String
-  subscriptionPlan   SubscriptionPlan @relation(fields: [subscriptionPlanId], references: [id])
-  status             String
-  startedAt          DateTime         @default(now())
-  canceledAt         DateTime?
-}
-
-model AuditJob {
-  id           String   @id @default(uuid())
-  url          String
-  status       String // "pending" | "running" | "done" | "error"
-  stage        Int      @default(0) // 0, 1, 2, 3
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  errorMessage String?
-  results      Json? // Full audit result object
-
-  @@index([url, status, createdAt])
-  @@index([status])
-}
-
-// Smokey + Wildcat Models
 enum PlanTier {
   starter
   growth
@@ -175,7 +596,6 @@ enum EmailStatus {
   BOUNCED
 }
 
-// Smokey Play System Enums
 enum PlayType {
   HOMEPAGE_ELIGIBILITY
   TRUST_STRUCTURING
@@ -223,368 +643,74 @@ enum ToolSessionStatus {
   FAILED
 }
 
-model Lead {
-  id            String     @id @default(cuid())
-  email         String
-  name          String?
-  companyName   String?
-  canonicalUrl  String?
-  status        LeadStatus @default(ANONYMOUS)
-  source        LeadSource
-  auditId       String?
-  audit         AuditResult? @relation(fields: [auditId], references: [id], onDelete: SetNull)
-  metadata      Json?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  
-  payments      Payment[]
-  client        Client?
-  
-  @@index([email])
-  @@index([status])
+enum artifact_type {
+  markdown
+  html
+  json
+  text
+  link
+  image
 }
 
-model Payment {
-  id                    String        @id @default(cuid())
-  stripeSessionId       String        @unique
-  stripePaymentIntentId String?
-  leadId                String?
-  lead                  Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  clientId              String?
-  client                Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  amountCents           Int
-  currency              String        @default("usd")
-  status                PaymentStatus @default(PENDING)
-  customerName          String?
-  companyName           String?
-  canonicalUrl          String?
-  email                 String
-  metadata              Json?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  
-  @@index([leadId])
-  @@index([clientId])
-  @@index([stripeSessionId])
-  @@index([status])
+enum audit_status {
+  queued
+  running
+  completed
+  failed
+  partial
 }
 
-model Client {
-  id                    String   @id @default(cuid())
-  email                 String
-  companyName           String?
-  canonicalUrl          String
-  planTier              PlanTier @default(starter)
-  contractStartDate     DateTime
-  contractLengthMonths  Int      @default(12)
-  status                ClientStatus @default(ACTIVE)
-  allow_audit_free_access Boolean @default(false)
-  leadId                String?  @unique
-  lead                  Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
-  contracts        Contract[]
-  timelines        ClientTimeline[]
-  meetings         Meeting[]
-  audits           AuditResult[] // Link to existing audits
-  payments         Payment[]
-  plays            Play[] // Legacy - kept temporarily for migration
-  clientConfig     ClientConfig?
-  signals          Signal[]
-  decisions        Decision[]
-  plans            Plan[]
-  events           Event[]
-  
-  @@index([email])
-  @@index([status])
+enum content_type {
+  blog
+  landing_page
+  product_page
+  how_to
+  editorial
+  email
+  social
+  other
 }
 
-model Contract {
-  id                String   @id @default(cuid())
-  clientId          String
-  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  startDate         DateTime
-  endDate           DateTime
-  lengthMonths      Int
-  planTier          PlanTier
-  status            ContractStatus @default(ACTIVE)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  @@index([clientId])
-  @@index([status])
+enum llm_agent {
+  crimson
+  midnight
+  burnt
+  combined
 }
 
-model TimelineTemplate {
-  id            String   @id @default(cuid())
-  planTier      PlanTier
-  phaseName     String
-  dayOffset     Int      // Days from contract start
-  toolSequence  Json     // Array of tool configs: [{tool: "audit", required: true}, ...]
-  description   String?
-  createdAt     DateTime @default(now())
-  
-  @@unique([planTier, phaseName])
-  @@index([planTier])
+enum llm_run_status {
+  queued
+  running
+  succeeded
+  failed
+  cancelled
 }
 
-model ClientTimeline {
-  id                String   @id @default(cuid())
-  clientId          String
-  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  phaseName         String
-  scheduledDate     DateTime
-  status            TimelineStatus @default(UPCOMING)
-  toolSequence     Json     // Copied from template
-  executionResults Json?    // Store tool execution IDs
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  @@index([clientId])
-  @@index([status])
-  @@index([scheduledDate])
+enum member_role {
+  owner
+  admin
+  editor
+  viewer
+  client
 }
 
-model Meeting {
-  id              String   @id @default(cuid())
-  clientId        String?
-  client          Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  calendlyEventId String? @unique
-  email          String
-  meetingType    MeetingType
-  meetingSource  MeetingSource
-  scheduledAt    DateTime
-  status         String   @default("scheduled")
-  auditTriggered Boolean  @default(false)
-  midnightTriggered Boolean @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  
-  @@index([clientId])
-  @@index([email])
-  @@index([scheduledAt])
+enum payment_status {
+  initiated
+  authorized
+  paid
+  failed
+  refunded
+  voided
 }
 
-model EmailLog {
-  id            String   @id @default(cuid())
-  recipient     String
-  subject       String
-  templateType  String
-  sentAt        DateTime @default(now())
-  status        EmailStatus @default(SENT)
-  errorMessage  String?
-  metadata      Json?    // Store audit_id, client_id, etc.
-  
-  @@index([recipient])
-  @@index([sentAt])
+enum plan_tier {
+  free
+  pay_per_report
+  subscription
 }
 
-// Smokey Play System Models
-model Play {
-  id              String      @id @default(cuid())
-  clientId        String
-  client          Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  playType        PlayType
-  status          PlayStatus  @default(PENDING)
-  currentStep     Int         @default(1) // Current step number (1-5)
-  startedAt       DateTime    @default(now())
-  reassessAfter   DateTime?   // When to reassess after completion
-  branchedFrom    String?     // ID of play this was branched from
-  branchReason    String?     // Reason for branching
-  dependsOnPlayId String?     // ID of play this depends on
-  scheduledMonth  Int?        // Month number (1-N) for UI organization
-  blocking        Boolean     @default(false) // If this play blocks others
-  objective       String?     // Play objective description
-  createdAt       DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  
-  steps           PlayStep[]
-  dependentPlays  Play[]      @relation("PlayDependencies")
-  dependencyPlay  Play?       @relation("PlayDependencies", fields: [dependsOnPlayId], references: [id])
-  // Legacy model - toolSessions relation removed as new system uses Plan/Task ToolSession
-  
-  @@index([clientId])
-  @@index([status])
-  @@index([clientId, status]) // For finding active play per client
-  @@index([scheduledMonth])
-  @@index([dependsOnPlayId])
+enum seo_intent {
+  informational
+  comparison
+  transactional
 }
-
-model PlayStep {
-  id                String          @id @default(cuid())
-  playId            String
-  play              Play            @relation(fields: [playId], references: [id], onDelete: Cascade)
-  stepNumber        Int             // 1-5
-  stepCode          String?         // e.g., "1.1", "1.2"
-  title             String?         // Step title/description
-  status            StepStatus      @default(LOCKED)
-  toolSequence      Json            // Array of tool configs: [{tool: "audit", required: true}, ...]
-  executionResults  Json?           // Store tool execution results
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
-  // Legacy relations - kept for migration compatibility
-  // Note: New system uses Task/Plan models with their own Checkpoint and ToolSession
-  
-  @@unique([playId, stepNumber])
-  @@index([playId])
-  @@index([status])
-}
-
-model ClientConfig {
-  id                String   @id @default(cuid())
-  clientId          String   @unique
-  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  parallelPlayLimit Int      @default(1) // WIP limit based on tier
-  tier              PlanTier @default(starter)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  @@index([clientId])
-}
-
-// Canonical Platform Tables
-// Signals are immutable facts derived from audits, admin overrides, or system events.
-// Once created, signals cannot be updated or deleted - they represent historical facts.
-// Authority: Only Audit (fact generator), Admin (override), or System can create signals.
-model Signal {
-  id          String   @id @default(cuid())
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  signalType  String   // "audit_result", "status_change", "metric_threshold", etc.
-  source      String   // "audit", "manual", "system"
-  data        Json     // Signal payload (audit scores, metrics, flags) - IMMUTABLE
-  metadata    Json?    // Additional context - IMMUTABLE
-  createdAt   DateTime @default(now())
-  
-  decisions   Decision[]
-  
-  @@index([clientId])
-  @@index([signalType])
-  @@index([createdAt])
-}
-
-model Decision {
-  id                String   @id @default(cuid())
-  clientId          String
-  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  signalId          String?  // Signal that triggered this decision
-  signal            Signal?  @relation(fields: [signalId], references: [id], onDelete: SetNull)
-  decisionType      String   // "create_plan", "pause_plan", "branch_plan", etc.
-  reasoning         String?  // Why this decision was made
-  decisionSummary   String?  // Human-readable summary of the decision
-  decisionConfidence Float?  // Confidence score 0.0-1.0 based on signal strength and decision logic
-  metadata          Json?    // Decision context
-  createdAt         DateTime @default(now())
-  
-  plans             Plan[]   // One decision can generate multiple plans
-  
-  @@index([clientId])
-  @@index([signalId])
-  @@index([createdAt])
-}
-
-model Plan {
-  id              String   @id @default(cuid())
-  clientId        String
-  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  decisionId      String?
-  decision        Decision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
-  planType        String   // "title_search_relevance", "technical_foundations", etc.
-  objective       String
-  status          String   @default("pending") // "pending", "active", "paused", "completed", "queued"
-  scheduledMonth  Int?
-  dependsOnPlanId String?
-  dependsOnPlan   Plan?    @relation("PlanDependencies", fields: [dependsOnPlanId], references: [id])
-  dependentPlans  Plan[]   @relation("PlanDependencies")
-  blocking        Boolean  @default(false)
-  startedAt       DateTime @default(now())
-  reassessAfter   DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  tasks           Task[]
-  toolSessions    ToolSession[]
-  
-  @@index([clientId])
-  @@index([status])
-  @@index([decisionId])
-  @@index([scheduledMonth])
-}
-
-model Task {
-  id                String   @id @default(cuid())
-  planId            String
-  plan              Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  taskNumber        Int
-  taskCode          String?  // "1.1", "1.2", etc.
-  title             String
-  tool              String   // "audit", "crimson", "midnight", "burnt", "manual"
-  status            String   @default("locked") // "locked", "ready", "in_progress", "done", "blocked"
-  executionResults  Json?
-  hasCheckpoint     Boolean  @default(false) // Only blocking tasks have checkpoints
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  checkpoint        Checkpoint?
-  toolSessions      ToolSession[]
-  
-  @@unique([planId, taskNumber])
-  @@index([planId])
-  @@index([status])
-}
-
-model Checkpoint {
-  id                String   @id @default(cuid())
-  taskId            String   @unique
-  task              Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  result            String?  // "pass", "partial", "fail"
-  evaluatedAt       DateTime?
-  evaluationData    Json?
-  validateWith      String?  // "audit" or "manual"
-  successConditions Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  @@index([taskId])
-}
-
-model ToolSession {
-  id            String   @id @default(cuid())
-  taskId        String
-  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  planId        String?
-  plan          Plan?    @relation(fields: [planId], references: [id], onDelete: Cascade)
-  tool          String
-  status        String   @default("created") // "created", "launched", "completed", "failed"
-  payload       Json?
-  launchedAt    DateTime?
-  completedAt   DateTime?
-  results       Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  @@index([taskId])
-  @@index([planId])
-  @@index([status])
-}
-
-model Event {
-  id          String   @id @default(cuid())
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  eventType   String   // "plan_created", "task_completed", "checkpoint_passed", "signal_detected", etc.
-  entityType  String?  // "plan", "task", "checkpoint", "signal", "decision"
-  entityId    String?  // ID of the related entity
-  data        Json?    // Event payload
-  createdAt   DateTime @default(now())
-  
-  @@index([clientId])
-  @@index([eventType])
-  @@index([createdAt])
-  @@index([entityType, entityId])
-}
-
-// Auth models removed - using Supabase Auth instead
-// Account, Session, and VerificationToken are managed by Supabase

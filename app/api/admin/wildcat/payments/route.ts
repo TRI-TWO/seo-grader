@@ -11,12 +11,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const payments = await prisma.payment.findMany({
-      include: {
-        lead: true,
-        client: true,
-      },
-      orderBy: { createdAt: 'desc' },
+    const payments = await prisma.payments.findMany({
+      orderBy: { created_at: 'desc' },
       take: 100,
     });
 

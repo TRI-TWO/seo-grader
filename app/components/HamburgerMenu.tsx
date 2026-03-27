@@ -48,7 +48,7 @@ export default function HamburgerMenu() {
   const isHomePage = pathname === "/";
 
   return (
-    <div className="relative">
+    <div className="relative z-[70]">
       {/* Hamburger Icon Button */}
       <button
         onClick={() => setShowMenu(!showMenu)}
@@ -84,10 +84,10 @@ export default function HamburgerMenu() {
       {showMenu && (
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-[80]"
             onClick={() => setShowMenu(false)}
           />
-          <div className="absolute right-0 mt-2 w-48 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-50">
+          <div className="absolute right-0 mt-2 w-48 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-[90]">
             <div className="py-1">
               {/* Home */}
               <Link

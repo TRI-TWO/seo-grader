@@ -4,7 +4,7 @@ import { hasCapability, getUserPersona } from '@/lib/capabilities/check';
 import { runCrimson } from '@/lib/llms/runCrimson';
 import type { CrimsonAPIRequest, CrimsonAPIResponse } from '@/lib/llms/types';
 import { createClient } from '@/lib/supabase/server';
-import { validateCTAFlow, getToolRoleFromContext, isExecutionTool } from '@/lib/smokey/ctaFlow';
+import { validateCTAFlow, getToolRoleFromContext, isExecutionTool } from '@/lib/cta-flow';
 
 export const runtime = 'nodejs';
 

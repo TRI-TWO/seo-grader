@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { ClientStatus } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,21 +11,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Only return clients that are signed or active (Smokey can work with)
-    const clients = await prisma.client.findMany({
-      where: {
-        status: {
-          in: [ClientStatus.SIGNED, ClientStatus.ACTIVE],
-        },
-      },
-      include: {
-        contracts: {
-          where: { status: 'ACTIVE' },
-          take: 1,
-        },
-        lead: true,
-      },
-      orderBy: { createdAt: 'desc' },
+    // Supabase platform schema: public.clients (no status/contracts/leads fields).
+    const clients = await prisma.clients.findMany({
+      orderBy: { created_at: 'desc' },
+      take: 200,
     });
 
     return NextResponse.json({ clients });

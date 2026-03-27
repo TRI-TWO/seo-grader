@@ -182,6 +182,10 @@ function AdminArchPageContent() {
     },
   ];
 
+  const categories = Array.isArray(summary?.categories) ? summary.categories : [];
+  const signals = Array.isArray(summary?.signals) ? summary.signals : [];
+  const rules = Array.isArray(summary?.rules) ? summary.rules : [];
+
   return (
     <main className="min-h-[calc(100vh-200px)] px-6 py-12">
       <div className="max-w-6xl mx-auto">
@@ -280,7 +284,7 @@ function AdminArchPageContent() {
                     Categories
                   </h3>
                   <div className="space-y-2 text-sm text-gray-200">
-                    {(summary?.categories || []).map((cat: any) => (
+                    {categories.map((cat: any) => (
                       <div
                         key={cat.id}
                         className="bg-void-black rounded-lg border border-zinc-700 p-3 flex items-center justify-between"
@@ -296,7 +300,7 @@ function AdminArchPageContent() {
                         </div>
                       </div>
                     ))}
-                    {summary && summary.categories.length === 0 && (
+                    {summary && categories.length === 0 && (
                       <div className="text-xs text-cool-ash">
                         No categories configured for this client yet.
                       </div>
@@ -308,7 +312,7 @@ function AdminArchPageContent() {
                     Signals
                   </h3>
                   <div className="space-y-2 text-sm text-gray-200 max-h-64 overflow-y-auto pr-1">
-                    {(summary?.signals || []).map((signal: any) => (
+                    {signals.map((signal: any) => (
                       <div
                         key={signal.id}
                         className="bg-void-black rounded-lg border border-zinc-700 p-3"
@@ -320,7 +324,7 @@ function AdminArchPageContent() {
                         </div>
                       </div>
                     ))}
-                    {summary && summary.signals.length === 0 && (
+                    {summary && signals.length === 0 && (
                       <div className="text-xs text-cool-ash">
                         No signals configured for this client yet.
                       </div>
@@ -338,7 +342,7 @@ function AdminArchPageContent() {
                 rules for quick inspection.
               </p>
               <div className="space-y-2 max-h-80 overflow-y-auto pr-1 text-sm text-gray-200">
-                {(summary?.rules || []).map((rule: any) => (
+                {rules.map((rule: any) => (
                   <div
                     key={rule.id}
                     className="bg-void-black rounded-lg border border-zinc-700 p-3"
@@ -360,7 +364,7 @@ function AdminArchPageContent() {
                     )}
                   </div>
                 ))}
-                {summary && summary.rules.length === 0 && (
+                {summary && rules.length === 0 && (
                   <div className="text-xs text-cool-ash">
                     No rules configured for this client yet.
                   </div>

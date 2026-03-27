@@ -1,88 +1,65 @@
 import { stripe } from './client';
 import { prisma } from '@/lib/prisma';
-import { LeadSource, LeadStatus, PaymentStatus } from '@prisma/client';
 import Stripe from 'stripe';
+
+function parseOptionalUuid(value: string | null): string | null {
+  if (!value) return null;
+  const uuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuid.test(value) ? value : null;
+}
 
 export async function handleCheckoutSessionCompleted(
   session: Stripe.Checkout.Session
 ): Promise<void> {
-  // Extract metadata
-  const customerName = session.metadata?.customer_name || session.customer_details?.name || '';
+  const customerName =
+    session.metadata?.customer_name || session.customer_details?.name || '';
   const companyName = session.metadata?.company_name || '';
   const canonicalUrl = session.metadata?.canonical_url || '';
   const email = session.customer_email || session.customer_details?.email || '';
-  const auditId = session.metadata?.audit_id || null;
+  const auditIdRaw = session.metadata?.audit_id || null;
 
   if (!email) {
     throw new Error('Email is required but not found in checkout session');
   }
 
-  // Create or update lead
-  let lead = await prisma.lead.findFirst({
-    where: { email },
-    orderBy: { createdAt: 'desc' },
+  const org = await prisma.organizations.findFirst({
+    orderBy: { created_at: 'asc' },
   });
-
-  if (lead) {
-    // Update existing lead
-    lead = await prisma.lead.update({
-      where: { id: lead.id },
-      data: {
-        name: customerName || lead.name,
-        companyName: companyName || lead.companyName,
-        canonicalUrl: canonicalUrl || lead.canonicalUrl,
-        status: LeadStatus.PAID_UNLOCK,
-        auditId: auditId || lead.auditId,
-      },
-    });
-  } else {
-    // Create new lead
-    lead = await prisma.lead.create({
-      data: {
-        email,
-        name: customerName,
-        companyName,
-        canonicalUrl,
-        status: LeadStatus.PAID_UNLOCK,
-        source: LeadSource.STRIPE,
-        auditId: auditId || undefined,
-      },
-    });
+  if (!org) {
+    throw new Error(
+      'No row in organizations; cannot record payment. Seed an organization first.'
+    );
   }
 
-  // Create payment record
-  const paymentIntentId = typeof session.payment_intent === 'string' 
-    ? session.payment_intent 
-    : session.payment_intent?.id || null;
+  const paymentIntentId =
+    typeof session.payment_intent === 'string'
+      ? session.payment_intent
+      : session.payment_intent?.id || null;
 
-  await prisma.payment.create({
+  await prisma.payments.create({
     data: {
-      stripeSessionId: session.id,
-      stripePaymentIntentId: paymentIntentId,
-      leadId: lead.id,
-      amountCents: session.amount_total || 0,
-      currency: session.currency || 'usd',
-      status: PaymentStatus.COMPLETED,
-      customerName,
-      companyName,
-      canonicalUrl,
-      email,
+      org_id: org.id,
+      client_id: null,
+      audit_id: parseOptionalUuid(auditIdRaw),
+      user_id: null,
+      provider: 'stripe',
+      provider_checkout_id: session.id,
+      provider_payment_id: paymentIntentId,
+      amount_cents: session.amount_total || 0,
+      currency: (session.currency || 'usd').toUpperCase(),
+      status: 'paid',
+      paid_at: new Date(),
       metadata: {
-        sessionId: session.id,
-        auditId: auditId || null,
+        email,
+        customerName,
+        companyName,
+        canonicalUrl,
+        audit_id: auditIdRaw,
+        stripe_session_id: session.id,
       },
     },
   });
-
-  // Update audit if auditId is provided
-  if (auditId) {
-    await prisma.auditResult.update({
-      where: { id: auditId },
-      data: {
-        isPaid: true,
-      },
-    });
-  }
 }
 
 export function constructWebhookEvent(
@@ -92,5 +69,3 @@ export function constructWebhookEvent(
 ): Stripe.Event {
   return stripe.webhooks.constructEvent(payload, signature, secret);
 }
-
-

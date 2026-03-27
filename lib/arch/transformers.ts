@@ -45,22 +45,96 @@ function normalizeItems(input: any): { title: string; detail: string }[] {
     .filter((item) => item.title.length > 0);
 }
 
+/** Raw SQL / pg can return bigint; React cannot render BigInt as a child. */
+function coerceFiniteNumber(value: unknown, fallback: number): number {
+  if (value == null) return fallback;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export function toArchOverviewViewModel(
   row: ArchClientOutputRow | null,
   fallbackClientName: string,
   fallbackSiteUrl: string,
   fallbackTier: string
 ): ArchOverviewViewModel {
-  const score = row?.health_score ?? 0;
-  const status = normalizeStatus(row?.health_status ?? "critical");
-  const direction = normalizeDirection(row?.health_direction ?? "flat");
+  const score = coerceFiniteNumber(row?.health_score, 0);
+  const status = normalizeStatus(String(row?.health_status ?? "critical"));
+  const direction = normalizeDirection(String(row?.health_direction ?? "flat"));
   const updatedAt = row?.updated_at ? new Date(row.updated_at) : new Date();
 
+  const lastUpdatedIso = updatedAt.toISOString();
   return {
     clientName: fallbackClientName,
     siteUrl: fallbackSiteUrl,
     serviceTier: fallbackTier,
-    lastUpdated: updatedAt.toISOString(),
+    lastUpdated: lastUpdatedIso,
+    hasChatbotService: true,
+    hasSeoService: true,
+    contractEndsAt: null,
+    renewalWindowActive: false,
+    upsellOpportunities: [],
+    seoPyramid: {
+      enabled: false,
+      title: "SEO foundation pyramid",
+      layers: [
+        { key: "crawl", label: "Crawlability", status: "inactive" },
+        { key: "index", label: "Indexability", status: "inactive" },
+        { key: "a11y", label: "Accessibility", status: "inactive" },
+        { key: "rank", label: "Rankability", status: "inactive" },
+        { key: "click", label: "Clickability", status: "inactive" },
+      ],
+    },
+    scoreCircles: {
+      enabled: false,
+      items: [],
+    },
+    crmInteractionGrid: {
+      cells: [
+        {
+          key: "follow-up-calls",
+          title: "Follow-up calls",
+          primary: "0",
+          preview: "No items yet — click to view activity.",
+          href: "/arch/activity/follow-up-calls",
+        },
+        {
+          key: "incoming-calls",
+          title: "Incoming calls today",
+          primary: "0",
+          preview: "No items yet — click to view activity.",
+          href: "/arch/activity/incoming-calls",
+        },
+        {
+          key: "meetings",
+          title: "Next meeting",
+          primary: "None scheduled",
+          preview: "No items yet — click to view activity.",
+          href: "/arch/activity/meetings",
+        },
+        {
+          key: "bids",
+          title: "Bids to follow up",
+          primary: "0",
+          preview: "No items yet — click to view activity.",
+          href: "/arch/activity/bids",
+        },
+      ],
+    },
+    renewalUpsell: {
+      visible: false,
+      mode: "upsell",
+      headline: "",
+    },
+    serviceTasks: {
+      enabled: true,
+      mode: "seo_tasks",
+      waitingApproval: [],
+      active: [],
+      upcoming: [],
+    },
     healthCard: {
       score,
       status,
@@ -93,12 +167,12 @@ export function toArchOverviewViewModel(
 export function toArchProgressViewModel(
   row: ArchClientOutputRow | null
 ): ArchProgressViewModel {
-  const score = row?.health_score ?? 0;
+  const score = coerceFiniteNumber(row?.health_score, 0);
   return {
     healthCard: {
       score,
-      status: normalizeStatus(row?.health_status ?? "critical"),
-      direction: normalizeDirection(row?.health_direction ?? "flat"),
+      status: normalizeStatus(String(row?.health_status ?? "critical")),
+      direction: normalizeDirection(String(row?.health_direction ?? "flat")),
       summary:
         row?.summary ??
         "This score reflects technical health, trust signals, and conversion readiness.",

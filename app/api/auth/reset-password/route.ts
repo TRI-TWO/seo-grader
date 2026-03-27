@@ -28,15 +28,39 @@ function trimEnv(value: string | undefined): string | undefined {
   return t || undefined;
 }
 
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin);
+    return (
+      u.hostname === "localhost" ||
+      u.hostname.startsWith("127.") ||
+      u.hostname === "0.0.0.0"
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Normalize NEXT_PUBLIC_BASE_URL (trim slash, add scheme if host-only). */
 function originFromNextPublicBaseUrl(): string | undefined {
   const raw = trimEnv(process.env.NEXT_PUBLIC_BASE_URL);
   if (!raw) return undefined;
   const env = raw.replace(/\/$/, "");
-  if (env.startsWith("http://") || env.startsWith("https://")) {
-    return env;
+  const out =
+    env.startsWith("http://") || env.startsWith("https://")
+      ? env
+      : `https://${env}`;
+  // Vercel projects often copy .env with localhost; that would poison recovery redirect_to.
+  if (process.env.VERCEL === "1" && isLoopbackOrigin(out)) {
+    return undefined;
   }
-  return `https://${env}`;
+  return out;
+}
+
+function originFromVercelDeployment(): string | undefined {
+  const vercel = trimEnv(process.env.VERCEL_URL)?.replace(/\/$/, "");
+  if (!vercel) return undefined;
+  return `https://${vercel}`;
 }
 
 /**
@@ -45,6 +69,7 @@ function originFromNextPublicBaseUrl(): string | undefined {
  * request (x-forwarded-host / host), with a guard so Vercel never uses a bogus localhost Host.
  */
 function resolvePublicOrigin(req: NextRequest): string {
+  const onVercel = process.env.VERCEL === "1";
   const fromEnv = originFromNextPublicBaseUrl();
   if (fromEnv) {
     return fromEnv;
@@ -59,8 +84,7 @@ function resolvePublicOrigin(req: NextRequest): string {
 
   const isLoopbackHost =
     Boolean(host) &&
-    (host.includes("localhost") || host.startsWith("127."));
-  const onVercel = process.env.VERCEL === "1";
+    (host.includes("localhost") || host.startsWith("127.") || host === "[::1]");
 
   if (host && !(onVercel && isLoopbackHost)) {
     if (host.includes("localhost") || host.startsWith("127.")) {
@@ -72,12 +96,27 @@ function resolvePublicOrigin(req: NextRequest): string {
     return `${proto}://${host}`;
   }
 
-  const vercel = process.env.VERCEL_URL?.replace(/\/$/, "");
-  if (vercel) {
-    return `https://${vercel}`;
+  const fromVercel = originFromVercelDeployment();
+  if (fromVercel) {
+    return fromVercel;
   }
 
   return "http://localhost:3000";
+}
+
+/**
+ * Supabase requires an absolute http(s) redirect URL. A bare host like `www.example.com`
+ * is treated as a path on supabase.co (e.g. .../www.example.com), which breaks recovery.
+ */
+function toAbsoluteHttpOrigin(origin: string): string {
+  const t = (origin || "").trim().replace(/\/$/, "");
+  if (!t) return "http://localhost:3000";
+  if (/^https?:\/\//i.test(t)) return t;
+  const host = t.replace(/^\/+/, "");
+  if (host.includes("localhost") || host.startsWith("127.")) {
+    return `http://${host}`;
+  }
+  return `https://${host}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -103,7 +142,7 @@ export async function POST(req: NextRequest) {
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const origin = resolvePublicOrigin(req);
+    const origin = toAbsoluteHttpOrigin(resolvePublicOrigin(req));
     const redirectTo = `${origin}/reset-password/complete`;
 
     const admin = getSupabaseClient();

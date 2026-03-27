@@ -137,28 +137,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Create signal from audit results (Audit is fact generator - emits signals)
-    // Find client by URL if possible, otherwise signal will be created without clientId
     let clientId: string | null = null;
     if (user) {
       try {
         const { prisma } = await import('@/lib/prisma');
-        const client = await prisma.client.findFirst({
-          where: { canonicalUrl: url },
+        const site = await prisma.sites.findFirst({
+          where: { canonical_url: url },
         });
-        if (client) {
-          clientId = client.id;
-          const { createAuditSignal } = await import('@/lib/smokey/signals');
-          const { logEvent } = await import('@/lib/smokey/events');
+        if (site) {
+          clientId = site.client_id;
+          const { createAuditSignal } = await import('@/lib/platform/signals');
+          const { logClientEvent } = await import('@/lib/platform/events');
           await createAuditSignal(clientId, stage3, { url, userId: user.id });
-          await logEvent(clientId, 'signal_detected', 'signal', null, {
+          await logClientEvent(clientId, 'audit_signal_created', {
             signalType: 'audit_result',
             source: 'audit',
+            url,
+            userId: user.id,
           });
         }
       } catch (err) {
         console.error('Error creating audit signal:', err);
-        // Don't fail the request if signal creation fails
       }
     }
 

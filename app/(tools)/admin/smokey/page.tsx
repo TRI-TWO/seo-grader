@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { PlanTier } from "@prisma/client";
 import PlanCard from "./components/PlanCard";
 import TaskList from "./components/TaskList";
 
@@ -51,7 +50,7 @@ type ClientData = {
   id: string;
   companyName: string | null;
   canonicalUrl: string;
-  planTier: PlanTier;
+  planTier: string;
   contractDuration: number;
   activePlansCount: number;
   queuedPlansCount: number;
@@ -171,7 +170,7 @@ export default function AdminSmokeyPage() {
     setExpandedPlans(newExpanded);
   };
 
-  const getTierLabel = (tier: PlanTier) => {
+  const getTierLabel = (tier: string) => {
     return tier.charAt(0).toUpperCase() + tier.slice(1);
   };
 

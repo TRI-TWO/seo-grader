@@ -12,6 +12,12 @@ function isAdminEmail(email: string | null | undefined): boolean {
   return email === "mgr@tri-two.com" || email === "tri-two@mgr";
 }
 
+function safeInternalRedirectPath(raw: string | null, fallback: string): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return fallback;
+  if (raw.includes("://") || raw.includes("\\")) return fallback;
+  return raw;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -35,12 +41,28 @@ export default function LoginPage() {
         setError(authError.message || "Invalid email or password");
         setLoading(false);
       } else if (data.user) {
-        // Check user email and redirect accordingly
-        if (isAdminEmail(data.user.email)) {
-          router.replace('/admin');
-        } else {
-          router.replace('/arch');
-        }
+        const redirectParam =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("redirect")
+            : null;
+        const isAdmin = isAdminEmail(data.user.email);
+        const adminTarget = safeInternalRedirectPath(
+          redirectParam,
+          "/admin"
+        );
+        const clientTarget = safeInternalRedirectPath(
+          redirectParam,
+          "/arch"
+        );
+        const nextPath = isAdmin
+          ? adminTarget.startsWith("/admin")
+            ? adminTarget
+            : "/admin"
+          : clientTarget.startsWith("/arch")
+            ? clientTarget
+            : "/arch";
+
+        router.replace(nextPath);
         router.refresh();
       } else {
         setError("An error occurred. Please try again.");
@@ -53,33 +75,44 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-white relative overflow-hidden">
-      <div className="absolute inset-0 opacity-10">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,0.05) 35px, rgba(255,255,255,0.05) 70px)",
-          }}
-        />
-      </div>
+    <div className="relative min-h-screen overflow-x-hidden bg-[#050810] text-white">
+      <div
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(6,182,212,0.12),transparent_50%),radial-gradient(ellipse_60%_40%_at_100%_50%,rgba(59,130,246,0.06),transparent_45%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none fixed inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+        aria-hidden
+      />
 
       <div className="relative z-10">
-        <header className="bg-void-black flex items-center justify-between px-6 py-4 md:px-12 md:py-6">
-          {/* Logo - Fully left justified */}
-          <div className="flex-shrink-0">
-            <BrandLogo />
-          </div>
-
-          {/* Hamburger Menu - Right justified */}
-          <div className="flex-shrink-0">
-            <HamburgerMenu />
+        <header className="relative border-b border-cyan-500/10 bg-slate-950/70 backdrop-blur-md">
+          <div className="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-2 sm:px-6">
+            <div className="justify-self-start">
+              <BrandLogo size={132} className="leading-none" />
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-400/80">
+                TRI-TWO
+              </p>
+              <h1 className="text-sm font-semibold tracking-wide text-white sm:text-base">
+                Client Login
+              </h1>
+            </div>
+            <div className="justify-self-end">
+              <HamburgerMenu />
+            </div>
           </div>
         </header>
 
-        <main className="min-h-[calc(100vh-200px)] px-6 py-12 flex items-center justify-center">
+        <main className="flex min-h-[calc(100vh-130px)] items-center justify-center px-6 py-8">
           <div className="w-full max-w-md">
-            <div className="bg-zinc-800 rounded-lg border border-zinc-700 p-8">
+            <div className="rounded-2xl border border-cyan-500/20 bg-slate-900/80 p-8 shadow-[0_0_0_1px_rgba(6,182,212,0.06),0_20px_50px_-20px_rgba(0,0,0,0.7)]">
               <h1 className="text-3xl font-bold mb-6 text-center">
                 Login
               </h1>

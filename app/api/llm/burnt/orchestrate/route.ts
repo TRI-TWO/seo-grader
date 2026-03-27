@@ -56,17 +56,16 @@ export async function POST(req: NextRequest) {
       try {
         // Find client by URL
         const { prisma } = await import('@/lib/prisma');
-        const client = await prisma.client.findFirst({
-          where: { canonicalUrl: url },
+        const site = await prisma.sites.findFirst({
+          where: { canonical_url: url },
         });
 
-        if (client) {
-          // Read latest audit signal
-          const { getLatestSignal } = await import('@/lib/smokey/signals');
-          const auditSignal = await getLatestSignal(client.id, 'audit_result');
-          
+        if (site) {
+          const { getLatestSignal } = await import('@/lib/platform/signals');
+          const auditSignal = await getLatestSignal(site.client_id, 'audit_result');
+
           if (auditSignal) {
-            auditContext = auditSignal.data;
+            auditContext = auditSignal.payload;
             response.audit = auditContext;
           } else {
             // No signal yet - run audit to create signal

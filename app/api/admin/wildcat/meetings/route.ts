@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,23 +8,11 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  try {
-    const meetings = await prisma.meeting.findMany({
-      include: {
-        client: true,
-      },
-      orderBy: { scheduledAt: 'desc' },
-      take: 100,
-    });
-
-    return NextResponse.json({ meetings });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || 'Failed to load meetings' },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(
+    {
+      error:
+        'Meetings are not stored in `public` in the current schema. Log Calendly payloads to `events` or add a meetings table.',
+    },
+    { status: 501 }
+  );
 }
-
-

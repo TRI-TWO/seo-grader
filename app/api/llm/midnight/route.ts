@@ -4,7 +4,7 @@ import { hasCapability, getUserPersona } from '@/lib/capabilities/check';
 import { runMidnight } from '@/lib/llms/runMidnight';
 import type { MidnightAPIRequest, MidnightAPIResponse } from '@/lib/llms/types';
 import { createClient } from '@/lib/supabase/server';
-import { validateCTAFlow, getToolRoleFromContext } from '@/lib/smokey/ctaFlow';
+import { validateCTAFlow, getToolRoleFromContext } from '@/lib/cta-flow';
 
 export const runtime = 'nodejs';
 

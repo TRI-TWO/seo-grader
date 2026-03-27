@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,23 +8,11 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  try {
-    const contracts = await prisma.contract.findMany({
-      include: {
-        client: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
-
-    return NextResponse.json({ contracts });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || 'Failed to load contracts' },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(
+    {
+      error:
+        'Contracts are not modeled as a dedicated table in the current schema. See `smokey_client_config` for contract-like fields.',
+    },
+    { status: 501 }
+  );
 }
-
-

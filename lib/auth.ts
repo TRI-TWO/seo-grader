@@ -114,25 +114,25 @@ export async function isClient(user: User): Promise<boolean> {
     return false // Admin is not a client
   }
   
-  // Check if user email matches a client
-  const client = await prisma.client.findFirst({
-    where: { email: user.email || '' },
-  });
-  
-  return !!client;
+  const client = await getClientForUser(user)
+  return Boolean(client)
 }
 
 /**
  * Get client for a user (if they are a client)
  */
 export async function getClientForUser(user: User) {
-  if (!user.email) {
-    return null;
-  }
-  
-  return await prisma.client.findFirst({
-    where: { email: user.email },
-  });
+  // Supabase platform schema: users belong to orgs via public.org_members; clients belong to orgs via public.clients.
+  // Pick the first org membership for this user, then the first client in that org.
+  const membership = await prisma.org_members.findFirst({
+    where: { user_id: user.id },
+  })
+  if (!membership) return null
+
+  return await prisma.clients.findFirst({
+    where: { org_id: membership.org_id },
+    orderBy: { created_at: 'desc' },
+  })
 }
 
 /**
@@ -143,8 +143,10 @@ export async function canClientAccessAudit(user: User): Promise<boolean> {
   if (!client) {
     return false;
   }
-  
-  return client.allow_audit_free_access === true;
+
+  // Old schema supported allow_audit_free_access; Supabase platform schema gates by payments/plan.
+  // Keep conservative default until audit paywall integration is updated.
+  return false;
 }
 
 /**

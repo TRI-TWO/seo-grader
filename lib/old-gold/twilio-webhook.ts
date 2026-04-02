@@ -148,13 +148,33 @@ export function validateStatusPayload(payload: Partial<TwilioStatusPayload>): {
   };
 }
 
-export function twimlResponse(message: string): string {
-  const escaped = message
+function escapeXmlText(value: string): string {
+  return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
 
+export function twimlResponse(message: string): string {
+  const escaped = escapeXmlText(message);
   return `<?xml version="1.0" encoding="UTF-8"?><Response><Say>${escaped}</Say></Response>`;
+}
+
+/**
+ * TwiML to bridge the call to a bi-directional Media Stream (e.g. OpenAI Realtime gateway).
+ * Pass short Parameter values only; avoid logging secrets on the Twilio side when possible.
+ */
+export function twimlStreamConnectResponse(args: { streamUrl: string; parameters: Record<string, string> }): string {
+  const { streamUrl, parameters } = args;
+  const urlEscaped = escapeXmlText(streamUrl);
+  const paramXml = Object.entries(parameters)
+    .map(
+      ([name, value]) =>
+        `<Parameter name="${escapeXmlText(name)}" value="${escapeXmlText(value)}"/>`
+    )
+    .join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="${urlEscaped}" track="inbound_track">${paramXml}</Stream></Connect></Response>`;
 }

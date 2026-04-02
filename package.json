@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "tsx server.ts",
     "db:push": "prisma db push",
     "db:fix-audits-fk": "prisma db execute --file prisma/scripts/drop_audits_auth_fk.sql --schema prisma/schema.prisma",
     "db:fix-public-auth-fks": "prisma db execute --file prisma/scripts/drop_public_auth_users_fks.sql --schema prisma/schema.prisma",
     "db:link-arch-user": "prisma db execute --file prisma/scripts/link_user_org_client.sql --schema prisma/schema.prisma",
     "db:migrate": "prisma migrate deploy",
     "build": "prisma generate && next build",
-    "start": "next start",
+    "start": "NODE_ENV=production tsx server.ts",
     "lint": "next lint",
     "postinstall": "prisma generate"
   },
@@ -28,12 +28,15 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "resend": "^6.9.4",
-    "stripe": "^20.1.0"
+    "stripe": "^20.1.0",
+    "tsx": "^4.21.0",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.0.0",
     "eslint-config-next": "^14.0.0",

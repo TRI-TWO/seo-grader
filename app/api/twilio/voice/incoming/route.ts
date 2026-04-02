@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import {
+  getTwilioVoiceBotClientIdFromEnv,
+  getTwilioVoiceMediaStreamUrlFromEnv,
+  runTwilioInboundRealtimeInit,
+} from '@/lib/bot/twilioInboundRealtimeInit';
+import {
   buildTwilioValidationUrl,
   getTwilioSignature,
   isTwilioSignatureValid,
@@ -8,10 +13,21 @@ import {
   parseTwilioFormPayload,
   shouldValidateTwilioSignature,
   twimlResponse,
+  twimlStreamConnectResponse,
   validateIncomingPayload,
 } from '@/lib/old-gold/twilio-webhook';
 
 export const runtime = 'nodejs';
+
+const VOICE_FALLBACK_TWIML_MESSAGE =
+  'Hi, thanks for calling. We are capturing your information now and our team will follow up shortly.';
+
+function twilioXmlResponse(xmlBody: string, status: number) {
+  return new NextResponse(xmlBody, {
+    status,
+    headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+  });
+}
 
 export async function POST(req: NextRequest) {
   let callSidForLog = 'unknown';
@@ -117,8 +133,41 @@ export async function POST(req: NextRequest) {
       throw new Error('Unable to upsert call_logs row');
     }
 
-    await prisma.$executeRaw`
-      INSERT INTO public.timeline_events (
+    const botClientId = getTwilioVoiceBotClientIdFromEnv();
+    const { log: realtimeLog, init: realtimeInit } = await runTwilioInboundRealtimeInit(botClientId);
+
+    if (realtimeLog.ok) {
+      console.info('Twilio inbound voice realtime session', {
+        callSid: payload.CallSid,
+        success: true,
+        botClientId: realtimeLog.bot_client_id,
+        promptVersion: realtimeLog.prompt_version,
+        tradeType: realtimeLog.trade_type,
+        openaiSessionId: realtimeLog.openai_session_id,
+        streamUrlConfigured: realtimeLog.stream_url_configured,
+      });
+    } else if ('skipped' in realtimeLog && realtimeLog.skipped) {
+      console.info('Twilio inbound voice realtime session skipped', {
+        callSid: payload.CallSid,
+        reason: realtimeLog.reason,
+      });
+    } else if ('error' in realtimeLog) {
+      console.warn('Twilio inbound voice realtime session failed', {
+        callSid: payload.CallSid,
+        botClientId: realtimeLog.bot_client_id,
+        error: realtimeLog.error,
+      });
+    }
+
+    const timelinePayload = {
+      call_sid: payload.CallSid,
+      from_phone: fromPhone,
+      to_phone: toPhone,
+      realtime_session: realtimeLog,
+    };
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO public.timeline_events (
         lead_id,
         call_log_id,
         event_type,
@@ -126,32 +175,47 @@ export async function POST(req: NextRequest) {
         payload,
         occurred_at
       )
-      VALUES (
-        ${callLog.lead_id},
-        ${callLog.id},
-        'call_answered'::timeline_event_type,
-        'voice',
-        jsonb_build_object(
-          'call_sid', ${payload.CallSid},
-          'from_phone', ${fromPhone},
-          'to_phone', ${toPhone}
-        ),
-        now()
-      )
-    `;
+      VALUES ($1, $2, 'call_answered'::timeline_event_type, 'voice', $3::jsonb, now())`,
+      callLog.lead_id,
+      callLog.id,
+      JSON.stringify(timelinePayload)
+    );
 
     // TODO(step5): implement lead creation/update in public.leads.
     // TODO(step5): implement notification fan-out (sms/slack/email).
-    // TODO(step5): implement real client-account mapping from Twilio destination number.
+    // TODO(step5): implement real client-account mapping from Twilio destination number (beyond TWILIO_VOICE_BOT_CLIENT_ID).
     // TODO(step6): harden Twilio signature validation for production deployment behavior.
 
-    return new NextResponse(
-      twimlResponse('Hi, thanks for calling. We are capturing your information now and our team will follow up shortly.'),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+    const streamUrl = getTwilioVoiceMediaStreamUrlFromEnv();
+    const ephemeralSecret = realtimeInit?.session.client_secret?.value?.trim();
+
+    if (realtimeLog.ok && realtimeInit && streamUrl) {
+      const streamParameters: Record<string, string> = {
+        call_sid: payload.CallSid,
+        call_log_id: callLog.id,
+        bot_client_id: realtimeInit.botClientId,
+        openai_session_id: realtimeInit.session.id ?? '',
+      };
+      if (ephemeralSecret) {
+        streamParameters.openai_client_secret = ephemeralSecret;
       }
-    );
+
+      return twilioXmlResponse(
+        twimlStreamConnectResponse({
+          streamUrl,
+          parameters: streamParameters,
+        }),
+        200
+      );
+    }
+
+    if (realtimeLog.ok && !streamUrl) {
+      console.info('Twilio inbound voice: realtime session ready; set TWILIO_VOICE_MEDIA_STREAM_URL for live streaming TwiML', {
+        callSid: payload.CallSid,
+      });
+    }
+
+    return twilioXmlResponse(twimlResponse(VOICE_FALLBACK_TWIML_MESSAGE), 200);
   } catch (error: unknown) {
     console.error('OLD GOLD incoming webhook error', { callSid: callSidForLog, error });
     return new NextResponse(

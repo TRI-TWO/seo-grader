@@ -8,12 +8,16 @@ const links = [
   { href: "/arch/overview", label: "Overview" },
   { href: "/arch/progress", label: "Progress" },
   { href: "/arch/activity", label: "Activity" },
+  { href: "/arch/old-gold/setup", label: "OLD GOLD" },
   { href: "/arch/account", label: "Account" },
 ];
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/arch/overview") {
     return pathname === "/arch" || pathname.startsWith("/arch/overview");
+  }
+  if (href === "/arch/old-gold/setup") {
+    return pathname === href || pathname.startsWith("/arch/old-gold/");
   }
   return (
     pathname === href ||

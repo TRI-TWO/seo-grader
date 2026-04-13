@@ -1,4 +1,5 @@
 import { initBotRealtimeVoiceSession, type BotRealtimeVoiceSessionInitResult } from '@/lib/bot/initBotRealtimeVoiceSession';
+import { isOpenAIRealtimeSessionCreateError } from '@/lib/bot/openaiRealtimeSession';
 
 /** Structured audit payload stored on `timeline_events.payload.realtime_session` (no secrets). */
 export type TwilioInboundRealtimeSessionLog =
@@ -15,6 +16,9 @@ export type TwilioInboundRealtimeSessionLog =
       ok: false;
       bot_client_id?: string;
       error: string;
+      /** OpenAI POST /realtime/sessions failed (after retries); use dedicated Twilio copy. */
+      session_init_failed?: true;
+      session_init_kind?: string;
     }
   | {
       ok: false;
@@ -61,11 +65,15 @@ export async function runTwilioInboundRealtimeInit(botClientId: string | null): 
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
+    const sessionInit = isOpenAIRealtimeSessionCreateError(err);
     return {
       log: {
         ok: false,
         bot_client_id: botClientId,
         error: message,
+        ...(sessionInit
+          ? { session_init_failed: true as const, session_init_kind: err.kind }
+          : {}),
       },
     };
   }

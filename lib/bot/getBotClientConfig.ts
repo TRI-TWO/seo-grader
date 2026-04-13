@@ -11,6 +11,8 @@ export type BotClientPromptSettings = {
   emergencyEnabled: boolean;
   afterHoursMessage: string;
   doNotQuotePrices: boolean;
+  /** Default true: echo + confirm name/phone in voice prompt. */
+  strictSlotConfirmation: boolean;
 };
 
 /**
@@ -50,6 +52,7 @@ const EMPTY_SETTINGS: BotClientPromptSettings = {
   emergencyEnabled: true,
   afterHoursMessage: '',
   doNotQuotePrices: true,
+  strictSlotConfirmation: true,
 };
 
 function str(value: string | null | undefined, fallback = ''): string {
@@ -118,12 +121,20 @@ export function parseBotClientSettingsJson(raw: unknown): BotClientPromptSetting
     EMPTY_SETTINGS.doNotQuotePrices
   );
 
+  const strictCamel = raw.strictSlotConfirmation;
+  const strictSnake = raw.strict_slot_confirmation;
+  const strictSlotConfirmation = readBoolean(
+    typeof strictCamel === 'boolean' ? strictCamel : strictSnake,
+    EMPTY_SETTINGS.strictSlotConfirmation
+  );
+
   return {
     allowedIssueCategories: categories,
     excludedServices: excluded,
     emergencyEnabled: emergency,
     afterHoursMessage: afterHours,
     doNotQuotePrices: doNotQuote,
+    strictSlotConfirmation,
   };
 }
 
@@ -152,6 +163,7 @@ export function toPlumbingInboundPromptSettings(s: BotClientPromptSettings): Plu
   out.emergency_enabled = s.emergencyEnabled;
   if (s.afterHoursMessage) out.after_hours_message = s.afterHoursMessage;
   out.do_not_quote_prices = s.doNotQuotePrices;
+  out.strict_slot_confirmation = s.strictSlotConfirmation;
   return out;
 }
 
@@ -181,7 +193,7 @@ export async function getBotClientConfig(id: string): Promise<BotVoiceClientConf
   const { data, error } = await supabase
     .from('bot_clients')
     .select(
-      'id, business_name, service_area_text, business_hours, fallback_phone, fallback_email, greeting_style, pricing_mode, prompt_version, settings, trade_type'
+      'id, business_name, service_area_text, business_hours:business_hours_json, fallback_phone, fallback_email, greeting_style, pricing_mode, prompt_version, settings:settings_json, trade_type'
     )
     .eq('id', id)
     .maybeSingle();

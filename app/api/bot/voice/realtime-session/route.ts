@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initBotRealtimeVoiceSession } from '@/lib/bot/initBotRealtimeVoiceSession';
+import { isOpenAIRealtimeSessionCreateError } from '@/lib/bot/openaiRealtimeSession';
 
 export const runtime = 'nodejs';
 
@@ -34,10 +35,15 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     const isNotFound = message.includes('bot_clients row not found');
+    const upstreamSession = isOpenAIRealtimeSessionCreateError(err);
     console.error('Realtime voice session init failed', err);
+    const status = isNotFound ? 404 : upstreamSession ? 503 : 500;
     return NextResponse.json(
-      { error: message },
-      { status: isNotFound ? 404 : 500 }
+      {
+        error: message,
+        ...(upstreamSession ? { sessionInitFailure: true, kind: err.kind } : {}),
+      },
+      { status }
     );
   }
 }

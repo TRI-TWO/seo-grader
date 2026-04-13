@@ -1,14 +1,46 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import BrandLogo from "@/app/components/BrandLogo";
 import LogoutButton from "@/app/components/LogoutButton";
+import { createClient } from "@/lib/supabase/client";
+
+function canUseCrmNav(email: string | null | undefined): boolean {
+  return email === "mgr@tri-two.com" || email === "tri-two@mgr";
+}
 
 export default function ToolsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname() ?? "";
+  const [crmAdmin, setCrmAdmin] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!cancelled) {
+          setCrmAdmin(canUseCrmNav(user?.email));
+        }
+      } catch {
+        if (!cancelled) setCrmAdmin(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
+
+  const showCrmActions = pathname.startsWith("/admin") && crmAdmin;
+
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#050810] text-white">
       <div
@@ -39,7 +71,23 @@ export default function ToolsLayout({
                 Admin Portal
               </h1>
             </div>
-            <div className="justify-self-end flex items-center gap-2">
+            <div className="justify-self-end flex flex-wrap items-center justify-end gap-2">
+              {showCrmActions ? (
+                <>
+                  <Link
+                    href="/admin/crm/new-client"
+                    className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
+                  >
+                    New Client +
+                  </Link>
+                  <Link
+                    href="/admin/crm/remove-client"
+                    className="rounded-lg border border-slate-600/80 bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
+                  >
+                    Remove Client −
+                  </Link>
+                </>
+              ) : null}
               <LogoutButton />
             </div>
           </div>

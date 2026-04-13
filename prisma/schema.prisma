@@ -64,6 +64,51 @@ model clients {
   @@index([org_id], map: "idx_clients_org_id")
 }
 
+/// OLD GOLD Arch onboarding questionnaire (draft + normalized final JSON).
+model old_gold_client_questionnaires {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id     String    @unique @db.Uuid
+  status        String    @default("draft")
+  draft_payload Json      @default("{}")
+  final_payload Json?
+  completed_at  DateTime? @db.Timestamptz(6)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([client_id], map: "idx_old_gold_client_questionnaires_client_id")
+  @@map("old_gold_client_questionnaires")
+}
+
+/// Admin CRM: Arch client invite + contact (links auth user, org, client).
+model client_portal_registrations {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id              String    @unique @db.Uuid
+  auth_user_id           String    @unique @db.Uuid
+  org_id                 String    @db.Uuid
+  contact_name           String
+  company_name           String
+  email                  String
+  phone                  String
+  address_line_1         String
+  address_line_2         String?
+  city                   String
+  state                  String
+  zip                    String
+  industry               String
+  invite_status          String    @default("pending")
+  invited_at             DateTime  @default(now()) @db.Timestamptz(6)
+  invite_email_sent_at   DateTime? @db.Timestamptz(6)
+  invite_last_error      String?
+  questionnaire_status String    @default("not_started")
+  deleted_at             DateTime? @db.Timestamptz(6)
+  created_at             DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([email], map: "idx_client_portal_registrations_email")
+  @@index([deleted_at], map: "idx_client_portal_registrations_deleted_at")
+  @@map("client_portal_registrations")
+}
+
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model content_assets {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

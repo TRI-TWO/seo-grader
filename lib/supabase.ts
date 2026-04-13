@@ -1,8 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
+function trimEnv(value: string | undefined): string | undefined {
+  const t = value?.trim();
+  return t || undefined;
+}
+
 // Lazy initialization pattern to prevent build-time errors
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = trimEnv(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL);
+const supabaseServiceKey = trimEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 if (!supabaseUrl) {
   console.warn('SUPABASE_URL is not set. Supabase client will not be available.');
@@ -25,7 +30,14 @@ export const supabase = supabaseUrl && supabaseServiceKey
 // Helper function to get Supabase client (with error handling)
 export function getSupabaseClient() {
   if (!supabase) {
-    throw new Error('Supabase client is not initialized. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.');
+    const url = trimEnv(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL);
+    const key = trimEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const parts: string[] = [
+      "Supabase admin client is not configured (required for Admin CRM auth operations).",
+    ];
+    if (!url) parts.push("Set SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL.");
+    if (!key) parts.push("Set SUPABASE_SERVICE_ROLE_KEY.");
+    throw new Error(parts.join(" "));
   }
   return supabase;
 }

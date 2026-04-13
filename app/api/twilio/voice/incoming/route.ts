@@ -22,6 +22,9 @@ export const runtime = 'nodejs';
 const VOICE_FALLBACK_TWIML_MESSAGE =
   'Hi, thanks for calling. We are capturing your information now and our team will follow up shortly.';
 
+const VOICE_SESSION_INIT_FALLBACK_MESSAGE =
+  "Sorry, we're having trouble connecting right now. Please try again in a moment.";
+
 function twilioXmlResponse(xmlBody: string, status: number) {
   return new NextResponse(xmlBody, {
     status,
@@ -175,7 +178,7 @@ export async function POST(req: NextRequest) {
         payload,
         occurred_at
       )
-      VALUES ($1, $2, 'call_answered'::timeline_event_type, 'voice', $3::jsonb, now())`,
+      VALUES ($1, $2::uuid, 'call_answered'::timeline_event_type, 'voice', $3::jsonb, now())`,
       callLog.lead_id,
       callLog.id,
       JSON.stringify(timelinePayload)
@@ -195,6 +198,8 @@ export async function POST(req: NextRequest) {
         call_log_id: callLog.id,
         bot_client_id: realtimeInit.botClientId,
         openai_session_id: realtimeInit.session.id ?? '',
+        /** Kitchen-sink-only bridge: confirm callback vs collect spoken number. */
+        caller_phone_e164: fromPhone,
       };
       if (ephemeralSecret) {
         streamParameters.openai_client_secret = ephemeralSecret;
@@ -215,7 +220,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return twilioXmlResponse(twimlResponse(VOICE_FALLBACK_TWIML_MESSAGE), 200);
+    const sessionInitFailed =
+      !realtimeLog.ok &&
+      'session_init_failed' in realtimeLog &&
+      realtimeLog.session_init_failed === true;
+
+    return twilioXmlResponse(
+      twimlResponse(sessionInitFailed ? VOICE_SESSION_INIT_FALLBACK_MESSAGE : VOICE_FALLBACK_TWIML_MESSAGE),
+      200
+    );
   } catch (error: unknown) {
     console.error('OLD GOLD incoming webhook error', { callSid: callSidForLog, error });
     return new NextResponse(

@@ -148,6 +148,10 @@ const STREETISH =
 const ADDRESS_REPAIR_INTENT =
   /\b(you\s+don'?t\s+have\s+my\s+full\s+address|don'?t\s+have\s+my\s+full\s+address|not\s+the\s+full\s+address|that'?s\s+not\s+the\s+full\s+address|that\s+is\s+not\s+the\s+full\s+address|i\s+wasn'?t\s+finished|i\s+was\s+not\s+finished|let\s+me\s+finish|you\s+cut\s+me\s+off|hold\s+on|wait)\b/i;
 
+/** Caller is clearly correcting a previously confirmed slot (not stray ASR). Must be one line — regex literals cannot span lines in JS/TS. */
+const LOCKED_SLOT_CORRECTION_INTENT =
+  /\b(wrong|incorrect|actually|instead|change|correct|fix|update|not\s+that|that'?s\s+wrong|that\s+is\s+wrong|different|replace|my\s+mistake|sorry\s*,\s*(it'?s|that'?s|the)\s+)\b/i;
+
 export function matchAddressRepairIntent(raw: string): boolean {
   const n = normalizeUtterance(raw);
   if (!n) {
@@ -165,11 +169,7 @@ export function utteranceSuggestsLockedSlotCorrection(raw: string): boolean {
   if (matchAddressRepairIntent(raw)) {
     return true;
   }
-  return /\b(
-    wrong|incorrect|actually|instead|change|correct|fix|update|
-    not\s+that|that'?s\s+wrong|that\s+is\s+wrong|different|replace|
-    my\s+mistake|sorry\s*,\s*(it'?s|that'?s|the)\s+
-  )\b/ix.test(n);
+  return LOCKED_SLOT_CORRECTION_INTENT.test(n);
 }
 
 export type ParsedStreetCity = { ok: true; street: string; city: string } | { ok: false };
@@ -315,21 +315,12 @@ export function streetLineLooksCompleteEnoughForProgress(raw: string): boolean {
   if (tokens.length >= 3 && /[\d\p{Nd}]/u.test(t) && /\p{L}/u.test(t)) {
     return true;
   }
-  // "123 main st" → 2 tokens after expand often becomes 3; also allow number + street name (>=3 letters)
+  // Two tokens: require a road-type cue (incl. abbrev expanded) or a long street name (e.g. Broadway), not "123 Smith".
   if (
     tokens.length === 2 &&
     /[\d\p{Nd}]/u.test(tokens[0]!) &&
     /^[\p{L}]+$/u.test(tokens[1]!) &&
-    tokens[1]!.length >= 3
-  ) {
-    return true;
-  }
-  // e.g. "123 Broadway" — no separate road-type token; require a longer name token to reduce false positives on "123 Smith".
-  if (
-    tokens.length === 2 &&
-    /[\d\p{Nd}]/u.test(tokens[0]!) &&
-    /^[\p{L}]+$/u.test(tokens[1]!) &&
-    tokens[1]!.length >= 8
+    (STREETISH.test(n) || tokens[1]!.length >= 8)
   ) {
     return true;
   }

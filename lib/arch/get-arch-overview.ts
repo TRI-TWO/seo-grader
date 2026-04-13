@@ -53,8 +53,9 @@ export async function getArchOverview(): Promise<ArchOverviewViewModel | null> {
   const client = await getClientForUser(user);
   if (!client) return null;
 
-  const [site, signal, smokeyState, smokeyConfig, eventRows] =
-    await Promise.all([
+  let site, signal, smokeyState, smokeyConfig, eventRows;
+  try {
+    [site, signal, smokeyState, smokeyConfig, eventRows] = await Promise.all([
       prisma.sites.findFirst({
         where: { client_id: client.id },
         orderBy: { created_at: "desc" },
@@ -76,6 +77,15 @@ export async function getArchOverview(): Promise<ArchOverviewViewModel | null> {
         take: 80,
       }),
     ]);
+  } catch (error) {
+    console.error("Error loading Arch overview data. Check DATABASE_URL and DB connectivity.", {
+      userId: user.id,
+      clientId: client.id,
+      hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
+      error,
+    });
+    return null;
+  }
 
   const now = new Date().toISOString();
   const status =

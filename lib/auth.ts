@@ -124,15 +124,24 @@ export async function isClient(user: User): Promise<boolean> {
 export async function getClientForUser(user: User) {
   // Supabase platform schema: users belong to orgs via public.org_members; clients belong to orgs via public.clients.
   // Pick the first org membership for this user, then the first client in that org.
-  const membership = await prisma.org_members.findFirst({
-    where: { user_id: user.id },
-  })
-  if (!membership) return null
+  try {
+    const membership = await prisma.org_members.findFirst({
+      where: { user_id: user.id },
+    })
+    if (!membership) return null
 
-  return await prisma.clients.findFirst({
-    where: { org_id: membership.org_id },
-    orderBy: { created_at: 'desc' },
-  })
+    return await prisma.clients.findFirst({
+      where: { org_id: membership.org_id },
+      orderBy: { created_at: 'desc' },
+    })
+  } catch (error) {
+    console.error('Error resolving client for user. Check DATABASE_URL and DB connectivity.', {
+      userId: user.id,
+      hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
+      error,
+    })
+    return null
+  }
 }
 
 /**

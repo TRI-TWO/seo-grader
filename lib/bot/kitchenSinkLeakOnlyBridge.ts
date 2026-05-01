@@ -8,15 +8,21 @@ import WebSocket from 'ws';
 import { createOpenAIRealtimeSocket } from '@/lib/bot/createOpenAIRealtimeSocket';
 import { getBotClientConfig } from '@/lib/bot/getBotClientConfig';
 import {
+  allRequiredFieldsValid,
   ASR_EMPTY_TRANSCRIPT_SIGNAL,
   createInitialFsmContext,
   greetingLine,
   isAddressPipelineStateForEmptyTranscript,
   isKitchenSinkAddressCapturePipelineState,
   transitionKitchenSinkLeakOnly,
+  type KitchenSinkCollected,
   type KitchenSinkLeakOnlyFsmState,
   type KitchenSinkSlotRetryKey,
 } from '@/lib/bot/kitchenSinkLeakOnlyStateMachine';
+import {
+  buildKitchenSinkTurnDebug,
+  kitchenSinkLockedSlotEvents,
+} from '@/lib/bot/kitchenSinkLeakOnlyTurnDebug';
 import type { CallbackWindow } from '@/lib/bot/kitchenSinkLeakOnlyValidators';
 import { getKitchenSinkLeakOnlyActiveTestMode } from '@/lib/bot/kitchenSinkLeakOnlyVoiceMode';
 import { persistKitchenSinkLeakOnlyOutcome } from '@/lib/bot/kitchenSinkLeakOnlyPersistence';
@@ -35,12 +41,85 @@ import { parseBridgeStartParams, type TwilioBridgeStartParams } from '@/lib/bot/
 const MAX_PENDING_MULAW = 256;
 const MANUAL_COMMIT_MS = 1800;
 /** Longer end-of-turn window only while collecting street/city/state/zip (narrow patch). */
-const MANUAL_COMMIT_MS_ADDRESS_CAPTURE = 2800;
+const MANUAL_COMMIT_MS_ADDRESS_CAPTURE = 4200;
+/** Longer end-of-turn window for callback yes/no + digits (STT more fragile). */
+const MANUAL_COMMIT_MS_CALLBACK = 4200;
 const POST_ASSISTANT_TAIL_MS = 400;
 /** Require ~200ms of appended μ-law @ 8kHz before commit (API minimum in plan: 100ms). */
 const MIN_CALLER_AUDIO_MS_FOR_COMMIT = 200;
 /** If a commit carried at least this much audio and ASR returns empty, treat as miss (address slots). */
 const MEANINGFUL_COMMIT_MS_FOR_EMPTY_TRANSCRIPT = 450;
+
+function envFlagOn(raw: string | undefined): boolean {
+  const v = (raw ?? '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+function envFlagOff(raw: string | undefined): boolean {
+  const v = (raw ?? '').trim().toLowerCase();
+  return v === '0' || v === 'false' || v === 'no' || v === 'off';
+}
+
+/** Test call-trace logging is on by default outside production; override with env if needed. */
+function isKitchenSinkTestTraceEnabled(): boolean {
+  const raw = process.env.VOICE_KITCHEN_SINK_TEST_TRACE;
+  if (envFlagOn(raw)) return true;
+  if (envFlagOff(raw)) return false;
+  return process.env.NODE_ENV !== 'production';
+}
+
+function collectedTraceSnapshot(collected: KitchenSinkCollected): Record<string, unknown> {
+  return {
+    normalizedIssue: collected.normalizedIssue,
+    leakPrimary: collected.leakPrimary,
+    leakSecondary: collected.leakSecondary,
+    callerName: collected.callerName,
+    streetAddress: collected.streetAddress,
+    city: collected.city,
+    state: collected.state,
+    zip: collected.zip,
+    callbackPhoneNumber: collected.callbackPhoneNumber,
+    callbackPhoneSource: collected.callbackPhoneSource,
+    callbackTimePreference: collected.callbackTimePreference,
+    addressRemainderDeferredToSms: collected.addressRemainderDeferredToSms,
+  };
+}
+
+export function manualCommitDelayMsForState(fsmState: KitchenSinkLeakOnlyFsmState): number {
+  return isKitchenSinkAddressCapturePipelineState(fsmState) || fsmState === 'address_confirm'
+    ? MANUAL_COMMIT_MS_ADDRESS_CAPTURE
+    : fsmState === 'issue_capture' || fsmState === 'painting_scope_capture' || fsmState === 'kitchen_sink_confirm'
+      ? 2400
+    : fsmState === 'collect_name' || fsmState === 'collect_unit'
+      ? 2400
+    : fsmState === 'callback_number_confirm' ||
+        fsmState === 'callback_number_collect' ||
+        fsmState === 'collect_callback_time' ||
+        fsmState === 'callback_confirm' ||
+        fsmState === 'close_wait'
+      ? MANUAL_COMMIT_MS_CALLBACK
+      : MANUAL_COMMIT_MS;
+}
+
+export function commitBlockReasonForDebug(params: {
+  closed: boolean;
+  manualTurnOpen: boolean;
+  assistantResponseOpen: boolean;
+  commitInFlight: boolean;
+  callerAudioAppendedSinceLastCommit: boolean;
+  bufferedCallerMs: number;
+  minCallerAudioMsForCommit: number;
+  waitingForUserTranscript: boolean;
+}): string | null {
+  if (params.closed) return 'closed';
+  if (!params.manualTurnOpen) return 'manual_turn_closed';
+  if (params.assistantResponseOpen) return 'assistant_response_open';
+  if (params.commitInFlight) return 'commit_in_flight';
+  if (params.waitingForUserTranscript) return 'waiting_for_user_transcript';
+  if (!params.callerAudioAppendedSinceLastCommit) return 'no_audio_appended';
+  if (params.bufferedCallerMs < params.minCallerAudioMsForCommit) return 'buffered_ms_below_min';
+  return null;
+}
 
 type TwilioWireEvent = {
   event?: string;
@@ -57,7 +136,7 @@ const SLAVE_INSTRUCTIONS =
   'in the latest session instructions block under SAY_THIS (one sentence). ' +
   'Do not add words, do not ask extra questions, do not improvise, do not add a second sentence. ' +
   'Keep it brief and natural prosody. ' +
-  'Policy: premium front-desk intake only — do not troubleshoot plumbing, diagnose causes, or walk the caller through repairs. ' +
+  'Policy: premium front-desk intake only — do not troubleshoot trade work, diagnose causes, or walk the caller through repairs. ' +
   'Do not ask open-ended discovery questions (for example: more information, what they noticed, or when water appears). ' +
   'Do not ask diagnostic timing questions such as whether the leak happens when the faucet is on or off. ' +
   'Follow only the single SAY_THIS sentence; one short forced-choice or slot question at a time. ' +
@@ -66,7 +145,12 @@ const SLAVE_INSTRUCTIONS =
   'CRITICAL: Finishing issue triage does NOT finish the call. After triage you must still collect name, street, city, state, ZIP, callback phone confirmation, and callback time — one slot at a time. ' +
   'Until SAY_THIS is the final recap sentence that includes the caller name and address summary, you must NOT say the call is complete, booked, scheduled, ' +
   'or that you will get something scheduled or taken care of. ' +
-  'If SAY_THIS asks for a name or address, you are still in intake — never add scheduling or wrap-up language.';
+  'If SAY_THIS asks for a name or address, you are still in intake — never add scheduling or wrap-up language. ' +
+  'Never invent, substitute, or correct customer details on your own. Repeat only the exact details present in SAY_THIS. ' +
+  'Do not split name capture into first and last name follow-ups; ask exactly what SAY_THIS asks. ' +
+  'Do not add your own option lists, room lists, or location menus (for example walls, ceilings, bathroom, kitchen areas) unless those exact words are in SAY_THIS. ' +
+  'CRITICAL verbatim rule: speak ONLY the SAY_THIS sentence — no preamble like Great or Sure, no apologies, no second sentences, and no extra clarifying questions about rooms, surfaces, cabinets, ceilings, trim, colors, scope, scheduling, appointments, pricing, crews, or project details unless those exact words appear in SAY_THIS. ' +
+  'After triage, intake is only the next slot in SAY_THIS; do not revisit or narrow the service.';
 
 function sendTwilioMedia(twilioWs: WebSocket, streamSid: string, payloadB64: string, markSeq: { n: number }) {
   if (twilioWs.readyState !== WebSocket.OPEN) {
@@ -174,6 +258,7 @@ function extractSessionAudioInputTurnDetection(sess: Record<string, unknown> | u
 export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: IncomingMessage): void {
   const remote = req.socket.remoteAddress ?? 'unknown';
   const activeTestMode = getKitchenSinkLeakOnlyActiveTestMode();
+  const callTraceEnabled = isKitchenSinkTestTraceEnabled();
 
   let bridgeParams: TwilioBridgeStartParams | null = null;
   let streamSid: string | null = null;
@@ -213,6 +298,9 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
   let sessionCreatedSeen = false;
   let audioDeltasThisResponse = 0;
   let debugAwaitFirstTwilioAfterThisCommit = false;
+  let traceStep = 0;
+  let callerTranscriptCount = 0;
+  let assistantPromptCount = 0;
 
   const callerUtterances: string[] = [];
   let pendingCallOutcome:
@@ -247,15 +335,78 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
     });
   }
 
+  function logTestTrace(event: string, extra: Record<string, unknown> = {}) {
+    if (!callTraceEnabled) {
+      return;
+    }
+    console.info('VOICE_KITCHEN_SINK_TEST_TRACE', {
+      ...logBase(),
+      event,
+      traceStep: ++traceStep,
+      fsmState,
+      callerTranscriptCount,
+      assistantPromptCount,
+      ...collectedTraceSnapshot(collected),
+      ...extra,
+    });
+  }
+
+  function logKitchenSinkFsmTurnDebug(params: {
+    fromState: KitchenSinkLeakOnlyFsmState;
+    collectedBefore: KitchenSinkCollected;
+    res: ReturnType<typeof transitionKitchenSinkLeakOnly>;
+    utterance: string;
+  }) {
+    const prev = params.fromState;
+    const tr = params.utterance;
+    const utterancePreview = tr.length > 120 ? `${tr.slice(0, 120)}…` : tr;
+    const turn = buildKitchenSinkTurnDebug({
+      fromState: prev,
+      res: params.res,
+      collectedBefore: params.collectedBefore,
+      utterancePreview,
+    });
+    console.info('VOICE_KITCHEN_SINK_TURN', {
+      ...logBase(),
+      ...turn,
+    });
+    const locked = kitchenSinkLockedSlotEvents(
+      params.collectedBefore,
+      params.res.collected,
+      params.res.transitionLog?.rejectionReason ?? null
+    );
+    if (locked.length > 0) {
+      console.info('VOICE_KITCHEN_SINK_LOCKED_SLOT', {
+        ...logBase(),
+        fromState: prev,
+        toState: params.res.nextState,
+        events: locked,
+      });
+    }
+  }
+
   function teardown(reason: string) {
     if (closed) {
       return;
     }
     closed = true;
+    if (fsmState === 'collect_street_address') {
+      console.info('OPENAI kitchen_sink_only street_lifecycle_disconnect', {
+        ...logBase(),
+        lastKnownFsmState: fsmState,
+        waitingForUserTranscript,
+        manualTurnOpen,
+        assistantResponseOpen,
+        bufferedCallerMs,
+        callerAudioAppendedSinceLastCommit,
+        hadPendingCommitTimer: Boolean(manualWindowTimer),
+      });
+    }
     if (manualWindowTimer) {
       clearTimeout(manualWindowTimer);
       manualWindowTimer = null;
     }
+    logTestTrace('bridge_disconnect', { reason });
     console.info('Twilio↔OpenAI kitchen-sink-only bridge disconnect', { ...logBase(), reason });
     try {
       openaiWs?.close();
@@ -287,12 +438,19 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
     manualTurnOpen = false;
   }
 
-  function tryCommit(oa: WebSocket, reason: string) {
-    if (!manualTurnOpen || assistantResponseOpen || commitInFlight || closed) {
-      return;
-    }
-    if (!callerAudioAppendedSinceLastCommit || bufferedCallerMs < MIN_CALLER_AUDIO_MS_FOR_COMMIT) {
-      return;
+  function tryCommit(oa: WebSocket, reason: string): { didSendCommit: boolean; blockReason: string | null } {
+    const blockReason = commitBlockReasonForDebug({
+      closed,
+      manualTurnOpen,
+      assistantResponseOpen,
+      commitInFlight,
+      callerAudioAppendedSinceLastCommit,
+      bufferedCallerMs,
+      minCallerAudioMsForCommit: MIN_CALLER_AUDIO_MS_FOR_COMMIT,
+      waitingForUserTranscript,
+    });
+    if (blockReason) {
+      return { didSendCommit: false, blockReason };
     }
     bufferedMsAtLastCommit = bufferedCallerMs;
     commitInFlight = true;
@@ -306,6 +464,7 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
       bufferedCallerMs,
       callerAudioAppendedSinceLastCommit,
     });
+    return { didSendCommit: true, blockReason: null };
   }
 
   function triggerSilenceReprompt(oa: WebSocket) {
@@ -353,18 +512,46 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
     bufferedCallerMs = 0;
     bufferedMsAtLastCommit = 0;
     commitInFlight = false;
-    const commitDelayMs =
-      isKitchenSinkAddressCapturePipelineState(fsmState) || fsmState === 'address_confirm'
-        ? MANUAL_COMMIT_MS_ADDRESS_CAPTURE
-        : MANUAL_COMMIT_MS;
+    const commitDelayMs = manualCommitDelayMsForState(fsmState);
+    if (fsmState === 'collect_street_address') {
+      console.info('OPENAI kitchen_sink_only street_lifecycle_listen_open', {
+        ...logBase(),
+        fsmState,
+        manualTurnOpen,
+        assistantResponseOpen,
+        waitingForUserTranscript,
+        chosenManualCommitDelayMs: commitDelayMs,
+        callerAudioAppendedSinceLastCommit,
+        bufferedCallerMs,
+        commitTimerArmed: true,
+      });
+    }
     manualWindowTimer = setTimeout(() => {
       manualWindowTimer = null;
       if (!manualTurnOpen || closed) {
         return;
       }
-      if (callerAudioAppendedSinceLastCommit && bufferedCallerMs >= MIN_CALLER_AUDIO_MS_FOR_COMMIT) {
-        tryCommit(oa, 'manual_timer');
-      } else {
+      if (fsmState === 'collect_street_address') {
+        const res = tryCommit(oa, 'manual_timer');
+        console.info('OPENAI kitchen_sink_only street_lifecycle_timer_fire', {
+          ...logBase(),
+          fsmState,
+          timerFired: true,
+          manualTurnOpen,
+          assistantResponseOpen,
+          waitingForUserTranscript,
+          bufferedCallerMs,
+          callerAudioAppendedSinceLastCommit,
+          didSendCommit: res.didSendCommit,
+          blockReason: res.blockReason,
+        });
+        if (!res.didSendCommit) {
+          triggerSilenceReprompt(oa);
+        }
+        return;
+      }
+      const res = tryCommit(oa, 'manual_timer');
+      if (!res.didSendCommit) {
         triggerSilenceReprompt(oa);
       }
     }, commitDelayMs);
@@ -441,6 +628,7 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
 
     const listenStates: KitchenSinkLeakOnlyFsmState[] = [
       'issue_capture',
+      'painting_scope_capture',
       'kitchen_sink_confirm',
       'leak_location_primary_capture',
       'leak_location_secondary_capture',
@@ -455,6 +643,7 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
       'callback_number_collect',
       'collect_callback_time',
       'callback_confirm',
+      'close_wait',
     ];
     if (listenStates.includes(fsmState)) {
       armListeningWindow(oa);
@@ -465,6 +654,18 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
     const sid = bridgeParams?.callSid;
     const callLogId = bridgeParams?.callLogId;
     const callOutcomeFinal = pendingCallOutcome ?? 'unsupported_issue';
+
+    const qualifiedOutcome =
+      callOutcomeFinal === 'qualified_kitchen_sink_leak' ||
+      callOutcomeFinal === 'qualified_plumbing_intake';
+    if (qualifiedOutcome && !allRequiredFieldsValid(collected, activeTestMode)) {
+      console.warn('VOICE_BRIDGE_QUALIFIED_WITHOUT_VALID_LEAD', {
+        ...logBase(),
+        callOutcome: callOutcomeFinal,
+        fsmState,
+        ...collectedTraceSnapshot(collected),
+      });
+    }
 
     if (!callLogId) {
       if (sid) {
@@ -492,6 +693,11 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
       callOutcome: callOutcomeFinal,
       endReason: pendingEndReason,
       collected,
+      transcriptSummary: callerUtterances.join(' | '),
+    });
+    logTestTrace('call_outcome_persisted', {
+      callOutcome: callOutcomeFinal,
+      endReason: pendingEndReason,
       transcriptSummary: callerUtterances.join(' | '),
     });
 
@@ -538,11 +744,19 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
           ...logBase(),
           voiceModeKitchenSinkLeakOnly: true,
         });
+        logTestTrace('call_started', {
+          voiceModeKitchenSinkLeakOnly: true,
+          callerPhoneE164: parsed.callerPhoneE164 ?? null,
+        });
 
         void (async () => {
           try {
             const config = await getBotClientConfig(parsed.botClientId);
             companyName = config.businessName.trim() || 'us';
+            if (activeTestMode === 'painting_intake') {
+              const paintingNameOverride = process.env.VOICE_TEST_COMPANY_NAME_OVERRIDE?.trim();
+              companyName = paintingNameOverride || 'Acme Painters';
+            }
             const greet = greetingLine(companyName);
             fsmState = 'greeting';
             lastAssistantPromptLineForReprompt = greet;
@@ -582,6 +796,11 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
                 eventType: 'session.update',
                 instructionsLength: session.instructions.length,
                 inputTranscriptionModel,
+              });
+              assistantPromptCount += 1;
+              logTestTrace('assistant_prompt', {
+                assistantLine: sayThisLine,
+                instructionsLength: session.instructions.length,
               });
               lastAssistantPromptLineForReprompt = sayThisLine;
               oaSock.send(JSON.stringify({ type: 'session.update', session }));
@@ -667,27 +886,161 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
 
                 if (j.type === 'conversation.item.input_audio_transcription.completed') {
                   const tr = typeof j.transcript === 'string' ? j.transcript : '';
-                  if (!waitingForUserTranscript || !tr.trim()) {
+                  const trimmed = tr.trim();
+                  if (trimmed) {
+                    callerTranscriptCount += 1;
+                    logTestTrace('caller_transcript', {
+                      transcript: trimmed,
+                      transcriptLen: trimmed.length,
+                    });
+                  } else {
+                    logTestTrace('caller_transcript_empty', {
+                      transcriptLen: tr.length,
+                      waitingForUserTranscript,
+                      bufferedMsAtLastCommit,
+                    });
+                  }
+                  const streetTranscriptShape = (
+                    s: string
+                  ):
+                    | 'full_street_candidate'
+                    | 'partial_number_only'
+                    | 'empty'
+                    | 'short_garbage'
+                    | 'other_unusable' => {
+                    const t = s.trim();
+                    if (!t) return 'empty';
+                    const cleaned = t.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+                    const tokens = cleaned.split(/\s+/).filter(Boolean);
+                    if (tokens.length === 0) return 'empty';
+                    if (tokens.length === 1 && tokens[0].length === 1) return 'short_garbage';
+                    if (tokens.length === 1 && tokens[0].length <= 2 && !/\d/.test(tokens[0])) return 'short_garbage';
+                    const numberWords = new Set([
+                      'zero',
+                      'one',
+                      'two',
+                      'three',
+                      'four',
+                      'five',
+                      'six',
+                      'seven',
+                      'eight',
+                      'nine',
+                      'ten',
+                      'eleven',
+                      'twelve',
+                      'thirteen',
+                      'fourteen',
+                      'fifteen',
+                      'sixteen',
+                      'seventeen',
+                      'eighteen',
+                      'nineteen',
+                      'twenty',
+                      'thirty',
+                      'forty',
+                      'fifty',
+                      'sixty',
+                      'seventy',
+                      'eighty',
+                      'ninety',
+                      'hundred',
+                      'thousand',
+                      'oh',
+                      'o',
+                    ]);
+                    const hasNumber = tokens.some((tok) => /^\d+$/.test(tok) || numberWords.has(tok));
+                    const hasStreetNameToken = tokens.some((tok) => /[a-z]/.test(tok) && !numberWords.has(tok));
+                    if (hasNumber && hasStreetNameToken) return 'full_street_candidate';
+                    if (hasNumber && !hasStreetNameToken) return 'partial_number_only';
+                    return 'other_unusable';
+                  };
+                  const isUnusableStreetTranscript = (s: string): boolean => {
+                    const shape = streetTranscriptShape(s);
+                    return shape === 'empty' || shape === 'short_garbage' || shape === 'partial_number_only';
+                  };
+                  if (
+                    waitingForUserTranscript &&
+                    trimmed &&
+                    fsmState === 'collect_street_address' &&
+                    bufferedMsAtLastCommit >= MEANINGFUL_COMMIT_MS_FOR_EMPTY_TRANSCRIPT &&
+                    isUnusableStreetTranscript(trimmed) &&
+                    isAddressPipelineStateForEmptyTranscript(fsmState) &&
+                    sendKitchenSinkSessionUpdateRef &&
+                    !assistantResponseOpen
+                  ) {
+                    // Treat "meaningful audio + unusable STT" like an address ASR-empty miss (street only).
+                    waitingForUserTranscript = false;
+                    commitInFlight = false;
+                    const snap = bufferedMsAtLastCommit;
+                    bufferedMsAtLastCommit = 0;
+                    const fromStateEmpty = fsmState;
+                    const collectedBeforeEmpty: KitchenSinkCollected = { ...collected };
+                    const res = transitionKitchenSinkLeakOnly({
+                      state: fsmState,
+                      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+                      collected,
+                      leakLocationReprompts,
+                      secondaryLeakReprompts,
+                      companyName,
+                      pendingCallbackNormalized,
+                      slotRetryCounts,
+                      activeTestMode,
+                    });
+                    fsmState = res.nextState;
+                    collected = res.collected;
+                    leakLocationReprompts = res.leakLocationReprompts;
+                    secondaryLeakReprompts = res.secondaryLeakReprompts;
+                    pendingCallbackNormalized = res.pendingCallbackNormalized;
+                    slotRetryCounts = res.slotRetryCounts;
+                    if (res.callOutcome) {
+                      pendingCallOutcome = res.callOutcome;
+                      pendingEndReason = res.endReason ?? null;
+                    }
+                    logKitchenSinkFsmTurnDebug({
+                      fromState: fromStateEmpty,
+                      collectedBefore: collectedBeforeEmpty,
+                      res,
+                      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+                    });
+                    const line = res.assistantLine;
+                    lastAssistantPromptLineForReprompt = line;
+                    sendKitchenSinkSessionUpdateRef(oa, line);
+                    sendResponseCreate(oa, 'kitchen_sink_unusable_transcript_address');
+                    return;
+                  }
+
+                  if (!waitingForUserTranscript || !trimmed) {
                     console.info('OPENAI kitchen_sink_only input_audio_transcription.completed', {
                       ...logBase(),
                       fsmState,
                       transcriptLen: tr.length,
                       skipped: true,
                       skipReason: !waitingForUserTranscript ? 'not_waiting' : 'empty_transcript',
+                      callerAudioAppendedSinceLastCommit,
+                      bufferedMsAtLastCommit,
                     });
-                    if (waitingForUserTranscript && !tr.trim()) {
+                    if (waitingForUserTranscript && !trimmed) {
                       waitingForUserTranscript = false;
                       commitInFlight = false;
                       const meaningfulAudio =
                         bufferedMsAtLastCommit >= MEANINGFUL_COMMIT_MS_FOR_EMPTY_TRANSCRIPT;
                       const snap = bufferedMsAtLastCommit;
                       bufferedMsAtLastCommit = 0;
+                      const callbackAsrEmptyStates: KitchenSinkLeakOnlyFsmState[] = [
+                        'callback_number_confirm',
+                        'callback_number_collect',
+                        'collect_callback_time',
+                        'callback_confirm',
+                      ];
                       if (
                         meaningfulAudio &&
-                        isAddressPipelineStateForEmptyTranscript(fsmState) &&
+                        callbackAsrEmptyStates.includes(fsmState) &&
                         sendKitchenSinkSessionUpdateRef &&
                         !assistantResponseOpen
                       ) {
+                        const fromStateEmpty = fsmState;
+                        const collectedBeforeEmpty: KitchenSinkCollected = { ...collected };
                         const res = transitionKitchenSinkLeakOnly({
                           state: fsmState,
                           utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
@@ -697,6 +1050,7 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
                           companyName,
                           pendingCallbackNormalized,
                           slotRetryCounts,
+                          activeTestMode,
                         });
                         fsmState = res.nextState;
                         collected = res.collected;
@@ -708,6 +1062,51 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
                           pendingCallOutcome = res.callOutcome;
                           pendingEndReason = res.endReason ?? null;
                         }
+                        logKitchenSinkFsmTurnDebug({
+                          fromState: fromStateEmpty,
+                          collectedBefore: collectedBeforeEmpty,
+                          res,
+                          utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+                        });
+                        sendKitchenSinkSessionUpdateRef(oa, res.assistantLine);
+                        sendResponseCreate(oa, 'kitchen_sink_empty_transcript_callback');
+                        return;
+                      }
+                      if (
+                        meaningfulAudio &&
+                        isAddressPipelineStateForEmptyTranscript(fsmState) &&
+                        sendKitchenSinkSessionUpdateRef &&
+                        !assistantResponseOpen
+                      ) {
+                        const fromStateEmpty = fsmState;
+                        const collectedBeforeEmpty: KitchenSinkCollected = { ...collected };
+                        const res = transitionKitchenSinkLeakOnly({
+                          state: fsmState,
+                          utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+                          collected,
+                          leakLocationReprompts,
+                          secondaryLeakReprompts,
+                          companyName,
+                          pendingCallbackNormalized,
+                          slotRetryCounts,
+                          activeTestMode,
+                        });
+                        fsmState = res.nextState;
+                        collected = res.collected;
+                        leakLocationReprompts = res.leakLocationReprompts;
+                        secondaryLeakReprompts = res.secondaryLeakReprompts;
+                        pendingCallbackNormalized = res.pendingCallbackNormalized;
+                        slotRetryCounts = res.slotRetryCounts;
+                        if (res.callOutcome) {
+                          pendingCallOutcome = res.callOutcome;
+                          pendingEndReason = res.endReason ?? null;
+                        }
+                        logKitchenSinkFsmTurnDebug({
+                          fromState: fromStateEmpty,
+                          collectedBefore: collectedBeforeEmpty,
+                          res,
+                          utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+                        });
                         const line = res.assistantLine;
                         lastAssistantPromptLineForReprompt = line;
                         console.info('OPENAI kitchen_sink_only empty_transcript_address_miss', {
@@ -738,6 +1137,7 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
                   const prev = fsmState;
                   const fsmListening: KitchenSinkLeakOnlyFsmState[] = [
                     'issue_capture',
+                    'painting_scope_capture',
                     'kitchen_sink_confirm',
                     'leak_location_primary_capture',
                     'leak_location_secondary_capture',
@@ -754,6 +1154,7 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
                     'callback_confirm',
                   ];
                   if (fsmListening.includes(fsmState)) {
+                    const collectedBefore: KitchenSinkCollected = { ...collected };
                     const res = transitionKitchenSinkLeakOnly({
                       state: fsmState,
                       utterance: tr,
@@ -763,6 +1164,7 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
                       companyName,
                       pendingCallbackNormalized,
                       slotRetryCounts,
+                      activeTestMode,
                     });
                     fsmState = res.nextState;
                     collected = res.collected;
@@ -784,6 +1186,13 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
                       validationOk: tl?.validationOk ?? null,
                       rejectionReason: tl?.rejectionReason ?? null,
                       slotRetryCounts: res.slotRetryCounts,
+                    });
+                    logTestTrace('fsm_transition', {
+                      fromState: tl?.fromState ?? prev,
+                      toState: tl?.toState ?? fsmState,
+                      rejectionReason: tl?.rejectionReason ?? null,
+                      validationOk: tl?.validationOk ?? null,
+                      normalizedValueWritten: tl?.normalizedValueWritten ?? null,
                     });
                     const rawTranscriptStates: KitchenSinkLeakOnlyFsmState[] = [
                       'kitchen_sink_confirm',
@@ -812,41 +1221,53 @@ export function attachKitchenSinkLeakOnlyMediaBridge(twilioWs: WebSocket, req: I
                       utterancePreview: tr.length > 160 ? `${tr.slice(0, 160)}…` : tr,
                       transitionLog: tl,
                     });
+                    logKitchenSinkFsmTurnDebug({
+                      fromState: prev,
+                      collectedBefore,
+                      res,
+                      utterance: tr,
+                    });
                     // #region agent log
-                    fetch('http://127.0.0.1:7349/ingest/72a03d4c-76ce-4f7e-8f4f-fe3158b2a070', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': 'be3567',
-                      },
-                      body: JSON.stringify({
-                        sessionId: 'be3567',
-                        runId: 'kitchen_sink_fsm',
-                        hypothesisId:
-                          prev === 'kitchen_sink_confirm' ||
-                          prev === 'leak_location_primary_capture' ||
-                          prev === 'leak_location_secondary_capture'
-                            ? 'H_leak'
-                            : 'H_addr_cb',
-                        location: 'kitchenSinkLeakOnlyBridge.ts:fsm',
-                        message: 'transition',
-                        data: {
-                          fromState: prev,
-                          toState: fsmState,
-                          validationOk: tl?.validationOk ?? null,
-                          rejectionReason: tl?.rejectionReason ?? null,
-                          ...(prev === 'kitchen_sink_confirm' ||
-                          prev === 'leak_location_primary_capture' ||
-                          prev === 'leak_location_secondary_capture'
-                            ? {
-                                transcriptPreview:
-                                  tr.length > 96 ? `${tr.slice(0, 96)}…` : tr,
-                              }
-                            : {}),
+                    if (prev === 'collect_street_address' || prev === 'collect_zip') {
+                      const trimmed = tr.trim();
+                      const digits = trimmed.replace(/\D/g, '');
+                      const hasDigit = digits.length > 0;
+                      const hasLetter = /[a-z]/i.test(trimmed);
+                      const zipLike5 = /^\d{5}$/.test(digits);
+                      fetch('http://127.0.0.1:7349/ingest/72a03d4c-76ce-4f7e-8f4f-fe3158b2a070', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'X-Debug-Session-Id': 'be3567',
                         },
-                        timestamp: Date.now(),
-                      }),
-                    }).catch(() => {});
+                        body: JSON.stringify({
+                          sessionId: 'be3567',
+                          runId: 'kitchen_sink_addr_zip',
+                          hypothesisId: prev === 'collect_street_address' ? 'H_street_regression' : 'H_zip_regression',
+                          location: 'kitchenSinkLeakOnlyBridge.ts:postTransition',
+                          message: 'field_transition',
+                          data: {
+                            fromState: prev,
+                            toState: res.nextState,
+                            rejectionReason: res.transitionLog?.rejectionReason ?? null,
+                            validationOk: res.transitionLog?.validationOk ?? null,
+                            transcriptLen: trimmed.length,
+                            hasDigit,
+                            hasLetter,
+                            digitCount: digits.length,
+                            zipLike5,
+                            slotRetryCounts: {
+                              street: res.slotRetryCounts.street ?? null,
+                              zip: res.slotRetryCounts.zip ?? null,
+                              address_asr_empty: res.slotRetryCounts.address_asr_empty ?? null,
+                            },
+                            collectedHasStreet: Boolean(res.collected.streetAddress?.trim()),
+                            collectedZipLen: (res.collected.zip ?? '').replace(/\D/g, '').length || 0,
+                          },
+                          timestamp: Date.now(),
+                        }),
+                      }).catch(() => {});
+                    }
                     // #endregion agent log
                     sendKitchenSinkSessionUpdate(oa, res.assistantLine);
                     sendResponseCreate(oa, 'kitchen_sink_only_user_turn');

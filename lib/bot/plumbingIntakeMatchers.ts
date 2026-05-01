@@ -17,6 +17,7 @@ export const WATER_HEATER_SERVICE_ISSUE = 'water_heater_service' as const;
 export const GARBAGE_DISPOSAL_ISSUE = 'garbage_disposal_issue' as const;
 export const SEWER_DRAIN_LINE_ISSUE = 'sewer_drain_line_issue' as const;
 export const EMERGENCY_PLUMBING_ISSUE = 'emergency_plumbing' as const;
+export const GENERAL_PLUMBING_LEAK_ISSUE = 'general_plumbing_leak' as const;
 
 export type PlumbingIntakeIssue =
   | typeof KITCHEN_SINK_LEAK_NORMALIZED
@@ -27,7 +28,8 @@ export type PlumbingIntakeIssue =
   | typeof WATER_HEATER_SERVICE_ISSUE
   | typeof GARBAGE_DISPOSAL_ISSUE
   | typeof SEWER_DRAIN_LINE_ISSUE
-  | typeof EMERGENCY_PLUMBING_ISSUE;
+  | typeof EMERGENCY_PLUMBING_ISSUE
+  | typeof GENERAL_PLUMBING_LEAK_ISSUE;
 
 export const SUPPORTED_PLUMBING_INTAKE_ISSUES: ReadonlySet<string> = new Set([
   KITCHEN_SINK_LEAK_NORMALIZED,
@@ -39,6 +41,7 @@ export const SUPPORTED_PLUMBING_INTAKE_ISSUES: ReadonlySet<string> = new Set([
   GARBAGE_DISPOSAL_ISSUE,
   SEWER_DRAIN_LINE_ISSUE,
   EMERGENCY_PLUMBING_ISSUE,
+  GENERAL_PLUMBING_LEAK_ISSUE,
 ]);
 
 const OFF_LANE_STRONG = [
@@ -99,6 +102,11 @@ export function classifyNonKitchenPlumbingIssue(raw: string): PlumbingIntakeIssu
     return FAUCET_ISSUE;
   }
 
+  // Accept generic leak reports without forcing room/location options up front.
+  if (/\b(leak|leaking|drip|dripping)\b/.test(n)) {
+    return GENERAL_PLUMBING_LEAK_ISSUE;
+  }
+
   if (/\bclog(?:ged|s)?\b|\b(backed\s+up|backing\s+up|won'?t\s+drain|slow\s+drain)\b/.test(n)) {
     return DRAIN_CLOG_ISSUE;
   }
@@ -156,6 +164,8 @@ export function plumbingIssueAckLine(issue: PlumbingIntakeIssue): string {
       return "Got it — sewer or main drain line. What's your name?";
     case EMERGENCY_PLUMBING_ISSUE:
       return "Got it — we'll treat this as urgent plumbing. What's your name?";
+    case GENERAL_PLUMBING_LEAK_ISSUE:
+      return "Got it — plumbing leak. What's your name?";
     default:
       return "Got it. What's your name?";
   }

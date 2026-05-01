@@ -28,6 +28,14 @@ const NAME_FILLER_EXACT = new Set(
   ].map((s) => normalizeUtterance(s))
 );
 
+/** Non-name intents commonly spoken when caller is correcting the bot. */
+const NAME_REJECTION_INTENT =
+  /\b(not\s+correct|that'?s\s+wrong|that\s+is\s+wrong|no\s+that'?s|no\s+that\s+is|wrong|incorrect|try\s+again|you\s+didn'?t|you\s+did\s+not|you\s+missed|what'?s\s+my\s+name)\b/i;
+
+/** Service/issue words that should never be accepted as a caller name. */
+const NAME_SERVICE_WORD =
+  /\b(leak|clog|drain|toilet|faucet|sink|pipe|dishwasher|water\s*heater|disposal|sewer|plumbing|paint|painting|interior|exterior|walls?|ceiling|siding|fascia|trim|morning|afternoon|evening)\b/i;
+
 /** US state / territory abbreviations we accept as 2-letter input. */
 const US_STATE_ABBR = new Set([
   'AL',
@@ -146,7 +154,31 @@ const STREETISH =
 
 /** Caller signals they were cut off or the address is incomplete (address-capture slots only). */
 const ADDRESS_REPAIR_INTENT =
-  /\b(you\s+don'?t\s+have\s+my\s+full\s+address|don'?t\s+have\s+my\s+full\s+address|not\s+the\s+full\s+address|that'?s\s+not\s+the\s+full\s+address|that\s+is\s+not\s+the\s+full\s+address|i\s+wasn'?t\s+finished|i\s+was\s+not\s+finished|let\s+me\s+finish|you\s+cut\s+me\s+off|hold\s+on|wait)\b/i;
+  /\b(you\s+don'?t\s+have\s+my\s+full\s+address|don'?t\s+have\s+my\s+full\s+address|not\s+the\s+full\s+address|that'?s\s+not\s+the\s+full\s+address|that\s+is\s+not\s+the\s+full\s+address|i\s+wasn'?t\s+finished|i\s+was\s+not\s+finished|let\s+me\s+finish|you\s+cut\s+me\s+off|hold\s+on|wait|need\s+to\s+give\s+(you\s+)?(the\s+)?street\s+address|haven'?t\s+given\s+(you\s+)?(the\s+)?street\s+address)\b/i;
+
+/** Generic correction words that are not plausible cities ("everything", "all of it", etc). */
+const ADDRESS_RESET_ONLY_INTENT =
+  /\b(everything|all of it|whole address|entire address|all of that|the whole thing|start over)\b/i;
+
+/** City slot should ignore acknowledgements and meta/instruction phrases. */
+const CITY_INVALID_EXACT = new Set([
+  'yes',
+  'yeah',
+  'yep',
+  'yup',
+  'no',
+  'nope',
+  'nah',
+  'ok',
+  'okay',
+  'sure',
+  'correct',
+  'right',
+]);
+
+const CITY_META_INTENT =
+  /\b(street|address|zip|zipcode|phone|number|callback)\b/i;
+const CITY_REPAIR_VERB = /\b(need|give|provide|confirm|update|correct|share)\b/i;
 
 /** Caller is clearly correcting a previously confirmed slot (not stray ASR). Must be one line — regex literals cannot span lines in JS/TS. */
 const LOCKED_SLOT_CORRECTION_INTENT =
@@ -160,7 +192,60 @@ export function matchAddressRepairIntent(raw: string): boolean {
   return ADDRESS_REPAIR_INTENT.test(n);
 }
 
+/** Caller asks to redo broad address content rather than giving a city/state/zip value. */
+export function matchAddressResetOnlyIntent(raw: string): boolean {
+  const n = normalizeUtterance(raw);
+  if (!n) {
+    return false;
+  }
+  return ADDRESS_RESET_ONLY_INTENT.test(n);
+}
+
+/** Caller wants to continue address capture now instead of deferring to SMS. */
+export function matchContinueAddressCaptureIntent(raw: string): boolean {
+  const n = normalizeUtterance(raw);
+  if (!n) {
+    return false;
+  }
+  return (
+    /\b(i\s+want\s+to\s+give\s+you|let\s+me\s+give\s+you|i\s+can\s+give\s+you|i'?ll\s+give\s+you)\b/.test(n) &&
+    /\b(address|street|city|zip|state)\b/.test(n)
+  );
+}
+
 /** True when caller is clearly correcting a previously confirmed slot (not stray ASR). */
+/** Caller says the callback number heard so far is incomplete / wrong. */
+export function matchCallbackNumberIncompleteObjection(raw: string): boolean {
+  const n = normalizeUtterance(raw);
+  if (!n) {
+    return false;
+  }
+  return (
+    /\b(you\s+don'?t\s+have\s+my\s+full\s+number|don'?t\s+have\s+my\s+full\s+number|that'?s\s+not\s+my\s+full\s+number|that\s+is\s+not\s+my\s+full\s+number)\b/.test(
+      n
+    ) ||
+    /\b(that'?s\s+incomplete|not\s+the\s+full\s+number|incomplete\s+number|wrong\s+number|not\s+my\s+whole\s+number)\b/.test(
+      n
+    ) ||
+    /\b(not\s+the\s+full\s+phone|missing\s+digits|only\s+part\s+of\s+the\s+number)\b/.test(n)
+  );
+}
+
+/** Empty, ASR placeholder, or too little signal to treat as a plumbing issue utterance. */
+export function isUnusableIssueTranscript(raw: string): boolean {
+  const t = raw.trim();
+  if (!t) {
+    return true;
+  }
+  if (t.length === 1) {
+    return true;
+  }
+  if (t.length <= 2 && !/\d/.test(t)) {
+    return true;
+  }
+  return false;
+}
+
 export function utteranceSuggestsLockedSlotCorrection(raw: string): boolean {
   const n = normalizeUtterance(raw);
   if (!n) {
@@ -245,7 +330,13 @@ export function collapseRepeatedUtterance(raw: string): string {
   }
   const out: string[] = [];
   for (const w of filtered) {
-    if (out.length > 0 && out[out.length - 1] === w) {
+    const prev = out[out.length - 1];
+    if (out.length > 0 && prev === w) {
+      // Preserve repeated digit tokens so "1 9 9 0 1" does not collapse into a broken ZIP.
+      if (/^\d+$/.test(w) && /^\d+$/.test(prev!)) {
+        out.push(w);
+        continue;
+      }
       continue;
     }
     out.push(w);
@@ -332,8 +423,18 @@ export function validateName(raw: string): ValidatorResult {
   if (!n) {
     return { ok: false, reason: 'empty' };
   }
+  if (NAME_REJECTION_INTENT.test(n)) {
+    return { ok: false, reason: 'correction_intent' };
+  }
   if (NAME_FILLER_EXACT.has(n)) {
     return { ok: false, reason: 'filler' };
+  }
+  if (NAME_SERVICE_WORD.test(n)) {
+    return { ok: false, reason: 'service_word' };
+  }
+  const tokenCount = n.split(/\s+/).filter(Boolean).length;
+  if (tokenCount > 4) {
+    return { ok: false, reason: 'too_many_tokens' };
   }
   const letters = (n.match(/\p{L}/gu) ?? []).length;
   if (letters < 2) {
@@ -407,6 +508,24 @@ export function validateCityPortionInCityStatePair(raw: string): ValidatorResult
   if (!t) {
     return { ok: false, reason: 'empty' };
   }
+  const digitRun = (() => {
+    let max = 0;
+    let cur = 0;
+    for (const ch of t) {
+      if (/\d/.test(ch)) {
+        cur += 1;
+        max = Math.max(max, cur);
+      } else {
+        cur = 0;
+      }
+    }
+    return max;
+  })();
+  const digitCount = (t.match(/\d/g) ?? []).length;
+  const letterCount = (t.match(/\p{L}/gu) ?? []).length;
+  if (digitRun >= 4 || (digitCount >= 6 && digitCount >= letterCount)) {
+    return { ok: false, reason: 'looks_like_phone_digits' };
+  }
   const n = normalizeUtterance(t);
   if (/^\d{5}$/.test(n.replace(/\s/g, ''))) {
     return { ok: false, reason: 'looks_like_zip' };
@@ -442,6 +561,37 @@ export function validateCity(raw: string): ValidatorResult {
     return { ok: false, reason: 'empty' };
   }
   const n = normalizeUtterance(t);
+  if (CITY_INVALID_EXACT.has(n)) {
+    return { ok: false, reason: 'filler_or_ack' };
+  }
+  if (matchAddressResetOnlyIntent(t)) {
+    return { ok: false, reason: 'address_reset_intent' };
+  }
+  if (CITY_META_INTENT.test(n) || (CITY_REPAIR_VERB.test(n) && /\b(address|street|state|zip)\b/.test(n))) {
+    return { ok: false, reason: 'address_meta_phrase' };
+  }
+  if (n.split(/\s+/).filter(Boolean).length > 4) {
+    return { ok: false, reason: 'too_many_tokens' };
+  }
+  const digitRun = (() => {
+    let max = 0;
+    let cur = 0;
+    for (const ch of t) {
+      if (/\d/.test(ch)) {
+        cur += 1;
+        max = Math.max(max, cur);
+      } else {
+        cur = 0;
+      }
+    }
+    return max;
+  })();
+  const digitCount = (t.match(/\d/g) ?? []).length;
+  const letterCount = (t.match(/\p{L}/gu) ?? []).length;
+  // ASR often turns partial NANP fragments into "city-ish" tokens; reject digit-heavy utterances.
+  if (digitRun >= 4 || (digitCount >= 6 && digitCount >= letterCount)) {
+    return { ok: false, reason: 'looks_like_phone_digits' };
+  }
   if (isDictionaryUsStateName(n)) {
     return { ok: false, reason: 'looks_like_state_name' };
   }
@@ -683,6 +833,51 @@ export function formatDigitsForSpeechAck(digits: string): string {
 }
 
 /**
+ * If the utterance is only spoken digit words and/or digit tokens (no street name),
+ * returns a compact digit string suitable for pending house-number continuation.
+ */
+export function extractHouseNumberDigitsIfDigitsOnlyUtterance(raw: string): string | null {
+  const t = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return null;
+  const DIGIT_WORD: Record<string, string> = {
+    zero: '0',
+    oh: '0',
+    o: '0',
+    one: '1',
+    two: '2',
+    three: '3',
+    four: '4',
+    five: '5',
+    six: '6',
+    seven: '7',
+    eight: '8',
+    nine: '9',
+  };
+  const tokens = t.split(/\s+/).filter(Boolean);
+  let out = '';
+  for (const tok of tokens) {
+    if (/^\d+$/.test(tok)) {
+      out += tok;
+      if (out.length > 6) return null;
+      continue;
+    }
+    const m = DIGIT_WORD[tok];
+    if (m !== undefined) {
+      out += m;
+      if (out.length > 6) return null;
+      continue;
+    }
+    return null;
+  }
+  return out.length ? out : null;
+}
+
+/**
  * US NANP digit string when utterance has some digits but not a full 10-digit number.
  * Returns null if empty or already a valid E.164 parse.
  */
@@ -717,20 +912,62 @@ export function validateCallbackWindow(
   if (maybeState.ok && !CALLBACK_WINDOW_TERMS.test(n) && !/\d/.test(n)) {
     return { ok: false, reason: 'looks_like_place_state' };
   }
+  const tokens = n.split(/\s+/).filter(Boolean);
+  if (tokens.length === 1) {
+    const t0 = tokens[0]!;
+    if (t0 === 'morning' || t0 === 'mornings') {
+      return { ok: true, normalized: 'morning' };
+    }
+    if (t0 === 'afternoon') {
+      return { ok: true, normalized: 'afternoon' };
+    }
+    if (t0 === 'evening' || t0 === 'evenings' || t0 === 'tonight') {
+      return { ok: true, normalized: 'evening' };
+    }
+  }
+  // Evening cues before morning heuristics — avoids mis-bucketing the current utterance.
+  if (/\b(evening|evenings|tonight|sunset|after work|dinner)\b/.test(n)) {
+    if (/\b(morning|mornings|before noon|breakfast)\b/.test(n)) {
+      return { ok: false, reason: 'ambiguous_time_window' };
+    }
+    return { ok: true, normalized: 'evening' };
+  }
   if (
     /\b(morning|mornings|early|a\.?\s*m\.?|before noon|breakfast)\b/.test(n) &&
-    !/\b(afternoon|evening|night|p\.?\s*m\.?)\b/.test(n)
+    !/\b(afternoon|evening|night|tonight|p\.?\s*m\.?)\b/.test(n)
   ) {
     return { ok: true, normalized: 'morning' };
   }
   if (/\b(afternoon|midday|lunch|noon)\b/.test(n) && !/\b(morning|evening)\b/.test(n)) {
     return { ok: true, normalized: 'afternoon' };
   }
-  if (/\b(evening|evenings|tonight|late|sunset|p\.?\s*m\.?|after work|dinner)\b/.test(n)) {
+  if (/\b(late|p\.?\s*m\.?)\b/.test(n) && !/\b(a\.?\s*m\.?|morning|before noon|breakfast)\b/.test(n)) {
     return { ok: true, normalized: 'evening' };
   }
   if (n === 'morning' || n === 'afternoon' || n === 'evening') {
     return { ok: true, normalized: n as CallbackWindow };
+  }
+  // Numeric clock-time fallback for voice: "2:15", "2 15", "14 30", "7 pm".
+  const timeLike = n.match(/^(\d{1,2})(?:[:\-\s](\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?$/i);
+  if (timeLike) {
+    const hourRaw = Number(timeLike[1]);
+    const mer = (timeLike[3] ?? '').toLowerCase().replace(/\s|\./g, '');
+    if (!Number.isNaN(hourRaw) && hourRaw >= 0 && hourRaw <= 23) {
+      if (mer === 'am') {
+        return { ok: true, normalized: 'morning' };
+      }
+      if (mer === 'pm') {
+        return { ok: true, normalized: hourRaw >= 5 ? 'evening' : 'afternoon' };
+      }
+      if (hourRaw >= 0 && hourRaw <= 11) {
+        if (hourRaw >= 6) return { ok: true, normalized: 'morning' };
+        return { ok: true, normalized: 'afternoon' };
+      }
+      if (hourRaw >= 12 && hourRaw <= 16) {
+        return { ok: true, normalized: 'afternoon' };
+      }
+      return { ok: true, normalized: 'evening' };
+    }
   }
   return { ok: false, reason: 'not_a_time_window' };
 }
@@ -834,6 +1071,34 @@ export function matchOptionalDetailDecline(raw: string): boolean {
       n
     )
   ) {
+    return true;
+  }
+  return false;
+}
+
+/** True when caller says thanks (post-close acknowledgement). */
+export function matchThanks(raw: string): boolean {
+  const n = normalizeUtterance(raw);
+  if (!n) {
+    return false;
+  }
+  return /\b(thanks|thank you|thankyou|appreciate it|appreciated)\b/i.test(n);
+}
+
+/** Empty / too-low-signal transcript for callback phone collection (avoid normal phone validation). */
+export function isUnusableCallbackPhoneTranscript(raw: string): boolean {
+  const t = raw.trim();
+  if (!t) {
+    return true;
+  }
+  if (t.length === 1) {
+    return true;
+  }
+  if (t.length <= 2 && !/\d/.test(t)) {
+    return true;
+  }
+  // If it's very short and contains no digits at all, treat as garbage.
+  if (t.length <= 4 && !/\d/.test(t)) {
     return true;
   }
   return false;

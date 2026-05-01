@@ -1,21 +1,32 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  inferKitchenSinkLeakTriage,
   matchBroadLeakLocation,
   matchKitchenSinkLeakIssue,
   matchLeakLocationDetailed,
+  matchSecondaryLeakChoice,
 } from './kitchenSinkLeakOnlyMatchers';
 import {
+  collapseRepeatedUtterance,
+  extractHouseNumberDigitsIfDigitsOnlyUtterance,
+  extractPartialZipDigits,
   matchAddressConfirmAffirmative,
   matchAddressRepairIntent,
+  matchContinueAddressCaptureIntent,
   matchCallbackRequestIntent,
   matchOptionalDetailDecline,
   matchYes,
   extractCallerNameForIntake,
+  isUnusableIssueTranscript,
+  matchCallbackNumberIncompleteObjection,
+  normalizeStreetAbbreviations,
   streetLineLooksCompleteEnoughForProgress,
+  titleCaseStreetWordsForSpeech,
   tryParseCityStateCombined,
   tryParseCityStateZipCombined,
   tryParseStreetLineAndCity,
+  utteranceSuggestsLockedSlotCorrection,
   validateCallbackWindow,
   validateCity,
   validateCityPortionInCityStatePair,
@@ -30,12 +41,23 @@ describe('kitchenSinkLeakOnlyValidators', () => {
     assert.equal(validateName('yeah').ok, false);
     assert.equal(validateName('Jo').ok, true);
     assert.equal(validateName('J').ok, false);
+    assert.equal(validateName('Dishwasher').ok, false);
+    assert.equal(validateName('Interior').ok, false);
+    assert.equal(validateName('Afternoon').ok, false);
+    assert.equal(validateName("No, that's not correct").ok, false);
   });
 
   it('validateStreet requires digits and letters', () => {
     assert.equal(validateStreet('1234').ok, false);
     assert.equal(validateStreet('Main Street').ok, false);
     assert.equal(validateStreet('123 Main St').ok, true);
+  });
+
+  it('extractHouseNumberDigitsIfDigitsOnlyUtterance compacts spoken digit words and digits-only', () => {
+    assert.equal(extractHouseNumberDigitsIfDigitsOnlyUtterance('245'), '245');
+    assert.equal(extractHouseNumberDigitsIfDigitsOnlyUtterance('two four five'), '245');
+    assert.equal(extractHouseNumberDigitsIfDigitsOnlyUtterance('2 4 5'), '245');
+    assert.equal(extractHouseNumberDigitsIfDigitsOnlyUtterance('245 Maple'), null);
   });
 
   it('validateStreet accepts common full street lines on first pass', () => {
@@ -49,6 +71,57 @@ describe('kitchenSinkLeakOnlyValidators', () => {
     assert.equal(streetLineLooksCompleteEnoughForProgress('123 Oak Lane'), true);
     assert.equal(streetLineLooksCompleteEnoughForProgress('123 smith'), false);
     assert.equal(streetLineLooksCompleteEnoughForProgress('123 Broadway'), true);
+    assert.equal(streetLineLooksCompleteEnoughForProgress('123 main st'), true);
+  });
+
+  it('collapseRepeatedUtterance dedupes stuttered city and issue tokens', () => {
+    assert.equal(collapseRepeatedUtterance('dover dover dover'), 'dover');
+    assert.equal(collapseRepeatedUtterance('a pipe a pipe a pipe'), 'pipe');
+    assert.equal(collapseRepeatedUtterance('1 9 9 0 1'), '1 9 9 0 1');
+  });
+
+  it('normalizeStreetAbbreviations expands spoken suffixes', () => {
+    assert.equal(normalizeStreetAbbreviations('123 main st'), '123 main street');
+  });
+
+  it('titleCaseStreetWordsForSpeech keeps building number and title-cases words', () => {
+    assert.equal(titleCaseStreetWordsForSpeech('123 main street'), '123 Main Street');
+  });
+
+  it('extractPartialZipDigits returns null for a full five-digit run', () => {
+    assert.equal(extractPartialZipDigits('19901'), null);
+  });
+
+  it('isUnusableIssueTranscript flags empty and single-character garbage', () => {
+    assert.equal(isUnusableIssueTranscript(''), true);
+    assert.equal(isUnusableIssueTranscript('   '), true);
+    assert.equal(isUnusableIssueTranscript('a'), true);
+    assert.equal(isUnusableIssueTranscript('\u516d'), true);
+    assert.equal(isUnusableIssueTranscript('ab'), true);
+    assert.equal(isUnusableIssueTranscript('pipe leak under sink'), false);
+  });
+
+  it('matchCallbackNumberIncompleteObjection matches explicit incomplete-number phrases', () => {
+    assert.equal(matchCallbackNumberIncompleteObjection("you don't have my full number"), true);
+    assert.equal(matchCallbackNumberIncompleteObjection("that's not my full number"), true);
+    assert.equal(matchCallbackNumberIncompleteObjection("that's incomplete"), true);
+    assert.equal(matchCallbackNumberIncompleteObjection('not the full number'), true);
+    assert.equal(matchCallbackNumberIncompleteObjection('3025551234'), false);
+  });
+
+  it('utteranceSuggestsLockedSlotCorrection flags explicit repair language', () => {
+    assert.equal(utteranceSuggestsLockedSlotCorrection('actually it is Dover'), true);
+    assert.equal(utteranceSuggestsLockedSlotCorrection('Dover'), false);
+  });
+
+  it('inferKitchenSinkLeakTriage maps kitchen sink leak + pipe cue to below_sink pipe', () => {
+    const t = inferKitchenSinkLeakTriage('kitchen sink leak it is a pipe');
+    assert.equal(t.primary, 'below_sink');
+    assert.equal(t.secondary, 'pipe');
+  });
+
+  it('matchSecondaryLeakChoice resolves repeated pipe token on below_sink path', () => {
+    assert.equal(matchSecondaryLeakChoice('pipe pipe pipe', 'below_sink'), 'pipe');
   });
 
   it('tryParseStreetLineAndCity parses comma and in-forms', () => {
@@ -70,12 +143,35 @@ describe('kitchenSinkLeakOnlyValidators', () => {
     assert.equal(matchAddressRepairIntent('wait'), true);
     assert.equal(matchAddressRepairIntent('I was not finished'), true);
     assert.equal(matchAddressRepairIntent('let me finish'), true);
+    assert.equal(matchAddressRepairIntent("I haven't given you the street address"), true);
     assert.equal(matchAddressRepairIntent('Dover Delaware'), false);
+  });
+
+  it('matchContinueAddressCaptureIntent detects caller wanting to keep giving address', () => {
+    assert.equal(matchContinueAddressCaptureIntent('No, I want to give you my address'), true);
+    assert.equal(matchContinueAddressCaptureIntent("let me give you the city and zip"), true);
+    assert.equal(matchContinueAddressCaptureIntent('yes'), false);
   });
 
   it('validateCity rejects state-looking tokens', () => {
     assert.equal(validateCity('TX').ok, false);
     assert.equal(validateCity('Dallas').ok, true);
+  });
+
+  it('validateCity rejects broad address-reset words', () => {
+    assert.equal(validateCity('everything').ok, false);
+    assert.equal(validateCity('all of it').ok, false);
+  });
+
+  it('validateCity rejects acknowledgements and address meta phrases', () => {
+    assert.equal(validateCity('yes').ok, false);
+    assert.equal(validateCity('okay').ok, false);
+    assert.equal(validateCity('I need to give you the street address').ok, false);
+  });
+
+  it('validateCity rejects digit-heavy fragments that look like partial phone captures', () => {
+    assert.equal(validateCity('443254').ok, false);
+    assert.equal(validateCityPortionInCityStatePair('443254').ok, false);
   });
 
   it('validateState accepts abbr and full name', () => {
@@ -197,6 +293,37 @@ describe('kitchenSinkLeakOnlyValidators', () => {
   it('validateCallbackWindow parses windows', () => {
     assert.equal(validateCallbackWindow('morning').ok, true);
     assert.equal(validateCallbackWindow('California').ok, false);
+  });
+
+  it('validateCallbackWindow maps evening to evening bucket', () => {
+    const a = validateCallbackWindow('evening');
+    assert.equal(a.ok, true);
+    if (a.ok) {
+      assert.equal(a.normalized, 'evening');
+    }
+    const b = validateCallbackWindow('the evening');
+    assert.equal(b.ok, true);
+    if (b.ok) {
+      assert.equal(b.normalized, 'evening');
+    }
+  });
+
+  it('validateCallbackWindow accepts numeric spoken times', () => {
+    const a = validateCallbackWindow('2 15');
+    assert.equal(a.ok, true);
+    if (a.ok) {
+      assert.equal(a.normalized, 'afternoon');
+    }
+    const b = validateCallbackWindow('7 pm');
+    assert.equal(b.ok, true);
+    if (b.ok) {
+      assert.equal(b.normalized, 'evening');
+    }
+    const c = validateCallbackWindow('9:30 am');
+    assert.equal(c.ok, true);
+    if (c.ok) {
+      assert.equal(c.normalized, 'morning');
+    }
   });
 
   it('matchYes handles phrases', () => {

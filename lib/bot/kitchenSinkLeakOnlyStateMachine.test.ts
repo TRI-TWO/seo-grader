@@ -6,6 +6,7 @@ import {
   allRequiredFieldsValid,
   ASR_EMPTY_TRANSCRIPT_SIGNAL,
   formatAddressForCloseSummary,
+  formatLockedFullAddressForSpeech,
   formatFullAddress,
   lineContainsPrematureSchedulingPromise,
   POST_TRIAGE_HANDOFF_NAME_LINE,
@@ -31,6 +32,17 @@ const baseParams: {
   pendingCallbackNormalized: null,
 };
 
+const OPEN_LOCKS: Pick<
+  KitchenSinkCollected,
+  'streetLocked' | 'cityLocked' | 'stateLocked' | 'zipLocked' | 'callbackLocked'
+> = {
+  streetLocked: false,
+  cityLocked: false,
+  stateLocked: false,
+  zipLocked: false,
+  callbackLocked: false,
+};
+
 const baseCollected = (): KitchenSinkCollected => ({
   normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
   leakPrimary: 'below_sink',
@@ -47,7 +59,16 @@ const baseCollected = (): KitchenSinkCollected => ({
   callbackTimePreference: 'the morning',
   addressRemainderDeferredToSms: false,
   zipPartialDigits: null,
+  streetNumberPending: null,
   callbackPhonePartialDigits: null,
+  ...OPEN_LOCKS,
+  streetLocked: true,
+  cityLocked: true,
+  stateLocked: true,
+  zipLocked: true,
+  callbackLocked: true,
+  callbackInboundConfirmRejected: false,
+  unitOrSuite: null,
 });
 
 const emptyIntakeCollected = (): KitchenSinkCollected => ({
@@ -67,6 +88,10 @@ const emptyIntakeCollected = (): KitchenSinkCollected => ({
   addressRemainderDeferredToSms: false,
   zipPartialDigits: null,
   callbackPhonePartialDigits: null,
+  ...OPEN_LOCKS,
+  callbackInboundConfirmRejected: false,
+  streetNumberPending: null,
+  unitOrSuite: null,
 });
 
 const afterStreetCollected = (): KitchenSinkCollected => ({
@@ -76,11 +101,38 @@ const afterStreetCollected = (): KitchenSinkCollected => ({
   leakSecondary: 'drain',
   callerName: 'Pat',
   streetAddress: '100 Main St',
+  streetLocked: true,
 });
 
 describe('kitchenSinkLeakOnlyStateMachine', () => {
   it('formatFullAddress joins parts', () => {
     assert.equal(formatFullAddress(baseCollected()), '10 Oak St, Austin, TX 78701');
+  });
+
+  it('formatLockedFullAddressForSpeech returns empty when a slot is not locked', () => {
+    assert.equal(formatLockedFullAddressForSpeech({ ...baseCollected(), cityLocked: false }), '');
+  });
+
+  it('formatAddressForCloseSummary does not emit a full street line when zip is not locked', () => {
+    const s = formatAddressForCloseSummary({ ...baseCollected(), zipLocked: false });
+    assert.ok(!s.includes('Oak'));
+    assert.ok(s.toLowerCase().includes('service address'));
+  });
+
+  it('callback_confirm yes prefers stored callback time phrase over stale pending bucket', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'callback_confirm',
+      utterance: 'yes',
+      collected: {
+        ...baseCollected(),
+        callbackTimePreference: 'the evening',
+      },
+      ...baseParams,
+      pendingCallbackNormalized: 'morning',
+    });
+    assert.equal(r.nextState, 'close_wait');
+    assert.ok(r.assistantLine.toLowerCase().includes('evening'));
+    assert.ok(!r.assistantLine.toLowerCase().includes('the morning'));
   });
 
   it('allRequiredFieldsValid is true for full collected', () => {
@@ -94,8 +146,245 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       collected: { ...baseCollected(), streetAddress: null, city: null, state: null, zip: null },
       ...baseParams,
     });
-    assert.equal(r.nextState, 'collect_city');
+    assert.equal(r.nextState, 'collect_unit');
     assert.equal(r.collected.streetAddress, '99 Pine Road');
+    assert.ok(r.assistantLine.toLowerCase().includes('apartment'));
+  });
+
+  it('no street prompt contains building name or building number', () => {
+    const initial = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: '123 Main Street',
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        leakPrimary: 'below_sink',
+        leakSecondary: 'drain',
+      },
+      ...baseParams,
+    });
+    assert.ok(!initial.assistantLine.toLowerCase().includes('building name'));
+    assert.ok(!initial.assistantLine.toLowerCase().includes('building number'));
+  });
+
+  it('no street prompt contains apartment building classification language', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        leakPrimary: 'below_sink',
+        leakSecondary: 'drain',
+      },
+      ...baseParams,
+    });
+    assert.ok(!r.assistantLine.toLowerCase().includes('apartment building'));
+  });
+
+  it('street ASR-empty defers to SMS after 6 misses (avoid premature defer)', () => {
+    const c: KitchenSinkCollected = {
+      ...emptyIntakeCollected(),
+      normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+      leakPrimary: 'below_sink',
+      leakSecondary: 'drain',
+    };
+    let curCollected: KitchenSinkCollected = c;
+    let curSlot: Partial<Record<KitchenSinkSlotRetryKey, number>> = {};
+    for (let miss = 1; miss <= 5; miss += 1) {
+      const cur = transitionKitchenSinkLeakOnly({
+        state: 'collect_street_address',
+        utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+        collected: curCollected,
+        ...baseParams,
+        slotRetryCounts: curSlot,
+      });
+      assert.equal(cur.nextState, 'collect_street_address');
+      assert.equal(cur.slotRetryCounts.address_asr_empty, miss);
+      curCollected = cur.collected;
+      curSlot = cur.slotRetryCounts;
+    }
+    const last = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected: curCollected,
+      ...baseParams,
+      slotRetryCounts: curSlot,
+    });
+    assert.equal(last.nextState, 'address_city_deferred_sms');
+    assert.equal(last.collected.addressRemainderDeferredToSms, true);
+  });
+
+  it('collect_street_address unstructured number-ish tokens defer after sixth partial-number-only miss', () => {
+    /** Not pure digit-token speech; must keep bump path (unlike compact "two four five"). */
+    const partialOnly = 'forty ninety';
+    const c: KitchenSinkCollected = {
+      ...emptyIntakeCollected(),
+      normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+      leakPrimary: 'below_sink',
+      leakSecondary: 'drain',
+    };
+    let curCollected: KitchenSinkCollected = c;
+    let curSlot: Partial<Record<KitchenSinkSlotRetryKey, number>> | undefined = undefined;
+    for (let miss = 1; miss <= 5; miss += 1) {
+      const cur = transitionKitchenSinkLeakOnly({
+        state: 'collect_street_address',
+        utterance: partialOnly,
+        collected: curCollected,
+        ...baseParams,
+        slotRetryCounts: curSlot,
+      });
+      assert.equal(cur.nextState, 'collect_street_address');
+      assert.equal(cur.slotRetryCounts.address_asr_empty, miss);
+      curCollected = cur.collected;
+      curSlot = cur.slotRetryCounts;
+    }
+    const last = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: partialOnly,
+      collected: curCollected,
+      ...baseParams,
+      slotRetryCounts: curSlot,
+    });
+    assert.equal(last.nextState, 'address_city_deferred_sms');
+  });
+
+  it('collect_street_address carries house number then merges street name on next turn', () => {
+    const c: KitchenSinkCollected = {
+      ...emptyIntakeCollected(),
+      normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+      leakPrimary: 'below_sink',
+      leakSecondary: 'drain',
+    };
+    const first = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: '245',
+      collected: c,
+      ...baseParams,
+    });
+    assert.equal(first.nextState, 'collect_street_address');
+    assert.equal(first.collected.streetNumberPending, '245');
+    assert.ok(first.assistantLine.toLowerCase().includes('street name'));
+
+    const second = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: 'Maple Avenue',
+      collected: first.collected,
+      ...baseParams,
+      slotRetryCounts: first.slotRetryCounts,
+    });
+    assert.equal(second.nextState, 'collect_unit');
+    assert.ok((second.collected.streetAddress ?? '').toLowerCase().includes('maple'));
+    assert.ok((second.collected.streetAddress ?? '').includes('245'));
+    assert.equal(second.collected.streetNumberPending, null);
+  });
+
+  it('collect_street_address accepts number words + street tokens (one two three main street)', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: 'one two three main street',
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        leakPrimary: 'below_sink',
+        leakSecondary: 'drain',
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_unit');
+  });
+
+  it('asks optional unit after street and does not block progress when skipped', () => {
+    const street = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: '500 Market Street',
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        leakPrimary: 'below_sink',
+        leakSecondary: 'drain',
+      },
+      ...baseParams,
+    });
+    assert.equal(street.nextState, 'collect_unit');
+    assert.ok(street.assistantLine.toLowerCase().includes('apartment'));
+    const unit = transitionKitchenSinkLeakOnly({
+      state: 'collect_unit',
+      utterance: 'Suite 200',
+      collected: street.collected,
+      ...baseParams,
+    });
+    assert.equal(unit.nextState, 'collect_city');
+    assert.equal(unit.collected.unitOrSuite, 'Suite 200');
+    assert.equal(unit.assistantLine, 'Got it. What city is that in?');
+
+    const skip = transitionKitchenSinkLeakOnly({
+      state: 'collect_unit',
+      utterance: 'no',
+      collected: street.collected,
+      ...baseParams,
+    });
+    assert.equal(skip.nextState, 'collect_city');
+  });
+
+  it('123 Main Street first pass uses narrow street-to-city line (no full-street repair)', () => {
+    const street = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: '123 Main Street',
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        leakPrimary: 'below_sink',
+        leakSecondary: 'drain',
+      },
+      ...baseParams,
+    });
+    assert.equal(street.nextState, 'collect_unit');
+    assert.equal(street.collected.streetAddress, '123 Main Street');
+    const unitSkip = transitionKitchenSinkLeakOnly({
+      state: 'collect_unit',
+      utterance: 'no',
+      collected: street.collected,
+      ...baseParams,
+    });
+    assert.equal(unitSkip.nextState, 'collect_city');
+    assert.equal(unitSkip.assistantLine, 'Got it. What city is that in?');
+    assert.ok(!unitSkip.assistantLine.toLowerCase().includes('building'));
+  });
+
+  it('collect_street_address accepts non-Main street names like Maple Road', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: '123 Maple Road',
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        leakPrimary: 'below_sink',
+        leakSecondary: 'drain',
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_unit');
+    assert.equal(r.collected.streetAddress, '123 Maple Road');
+  });
+
+  it('plausible locked street skips completeness reprompt on noisy follow-up', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: 'DE',
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        leakPrimary: 'below_sink',
+        leakSecondary: 'drain',
+        streetAddress: '123 Main Street',
+        streetLocked: true,
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_city');
+    assert.equal(r.collected.streetAddress, '123 Main Street');
+    assert.equal(r.assistantLine, 'Got it. What city is that in?');
   });
 
   it('address_confirm yes goes to callback_number_collect when no inbound caller id', () => {
@@ -126,7 +415,9 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       ...baseParams,
     });
     assert.equal(r.nextState, 'callback_number_confirm');
-    assert.ok(r.assistantLine.includes('best number'));
+    assert.ok(r.assistantLine.toLowerCase().includes('callback number'));
+    assert.ok(r.assistantLine.toLowerCase().includes('say yes or no'));
+    assert.ok(r.assistantLine.includes('202-555-9876'));
   });
 
   it('callback_number_confirm yes copies inbound to callback phone and asks callback time', () => {
@@ -163,7 +454,100 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
     assert.equal(r.nextState, 'callback_number_collect');
   });
 
-  it('callback_number_collect accepts NANP and advances to callback time', () => {
+  it('callback_number_collect redirects to ANI confirm when inbound is present and ANI was not rejected', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_collect',
+      utterance: '3025559999',
+      collected: {
+        ...baseCollected(),
+        inboundCallerPhoneE164: '+12025559876',
+        callbackPhoneNumber: null,
+        callbackPhoneSource: null,
+        callbackTimePreference: null,
+        callbackLocked: false,
+        callbackInboundConfirmRejected: false,
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'callback_number_confirm');
+    assert.ok(r.assistantLine.includes('202-555-9876'));
+  });
+
+  it('callback_number_confirm repeated ASR-empty with inbound stays on confirm (no collect escalation)', () => {
+    const collected = {
+      ...baseCollected(),
+      inboundCallerPhoneE164: '+12025559876',
+      callbackPhoneNumber: null,
+      callbackPhoneSource: null,
+      callbackTimePreference: null,
+      callbackLocked: false,
+      callbackInboundConfirmRejected: false,
+    };
+    const first = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_confirm',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected,
+      ...baseParams,
+    });
+    assert.equal(first.nextState, 'callback_number_confirm');
+    const second = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_confirm',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected: first.collected,
+      ...baseParams,
+      slotRetryCounts: first.slotRetryCounts,
+    });
+    assert.equal(second.nextState, 'callback_number_confirm');
+    assert.notEqual(second.nextState, 'callback_number_collect');
+  });
+
+  it('callback_number_confirm ASR-empty escalates to collect when address is deferred', () => {
+    const collected = {
+      ...baseCollected(),
+      inboundCallerPhoneE164: '+12025559876',
+      callbackPhoneNumber: null,
+      callbackPhoneSource: null,
+      callbackTimePreference: null,
+      callbackLocked: false,
+      callbackInboundConfirmRejected: false,
+      addressRemainderDeferredToSms: true,
+    };
+    const first = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_confirm',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected,
+      ...baseParams,
+    });
+    assert.equal(first.nextState, 'callback_number_confirm');
+    const second = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_confirm',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected: first.collected,
+      ...baseParams,
+      slotRetryCounts: first.slotRetryCounts,
+    });
+    assert.equal(second.nextState, 'callback_number_collect');
+  });
+
+  it('callback_number_confirm objection forces collect (no advancement)', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_confirm',
+      utterance: "you don't have my full number",
+      collected: {
+        ...baseCollected(),
+        inboundCallerPhoneE164: '+14432541963',
+        callbackPhoneNumber: null,
+        callbackPhoneSource: null,
+        callbackTimePreference: null,
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'callback_number_collect');
+    assert.ok(r.assistantLine.toLowerCase().includes('best number'));
+    assert.notEqual(r.nextState, 'collect_callback_time');
+  });
+
+  it('callback_number_collect accepts NANP and asks explicit confirmation before callback time', () => {
     const r = transitionKitchenSinkLeakOnly({
       state: 'callback_number_collect',
       utterance: '202 555 1212',
@@ -175,9 +559,66 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       },
       ...baseParams,
     });
+    assert.equal(r.nextState, 'callback_number_confirm');
+    assert.equal(r.collected.callbackPhoneNumber, '+12025551212');
+    assert.equal(r.collected.callbackPhoneSource, 'spoken');
+    assert.equal(r.collected.callbackLocked, false);
+    assert.ok(r.assistantLine.toLowerCase().includes('is that the best number'));
+  });
+
+  it('callback_number_confirm yes locks spoken callback phone and advances to callback time', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_confirm',
+      utterance: 'yes',
+      collected: {
+        ...baseCollected(),
+        callbackPhoneNumber: '+12025551212',
+        callbackPhoneSource: 'spoken',
+        callbackLocked: false,
+        callbackTimePreference: null,
+      },
+      ...baseParams,
+    });
     assert.equal(r.nextState, 'collect_callback_time');
     assert.equal(r.collected.callbackPhoneNumber, '+12025551212');
     assert.equal(r.collected.callbackPhoneSource, 'spoken');
+    assert.equal(r.collected.callbackLocked, true);
+  });
+
+  it('callback_number_confirm no on spoken phone returns to full number recollect', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_confirm',
+      utterance: 'no',
+      collected: {
+        ...baseCollected(),
+        callbackPhoneNumber: '+12025551212',
+        callbackPhoneSource: 'spoken',
+        callbackLocked: false,
+        callbackTimePreference: null,
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'callback_number_collect');
+    assert.equal(r.collected.callbackPhoneNumber, null);
+    assert.equal(r.collected.callbackPhoneSource, null);
+    assert.equal(r.collected.callbackLocked, false);
+  });
+
+  it('callback_number_collect single-character garbage does not run phone validation', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_collect',
+      utterance: 'А',
+      collected: {
+        ...baseCollected(),
+        callbackPhoneNumber: null,
+        callbackPhoneSource: null,
+        callbackTimePreference: null,
+        callbackLocked: false,
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'callback_number_collect');
+    assert.equal(r.transitionLog?.rejectionReason, 'callback_unusable_transcript');
   });
 
   it('collect_callback_time valid goes to callback_confirm', () => {
@@ -202,17 +643,17 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
     assert.equal(r.assistantLine, 'Just to confirm, this is your kitchen sink?');
   });
 
-  it('issue_capture with faucet only skips primary; asks secondary (faucet path)', () => {
+  it('issue_capture with faucet only skips secondary; locks faucet_self', () => {
     const r = transitionKitchenSinkLeakOnly({
       state: 'issue_capture',
       utterance: 'my kitchen sink faucet is leaking',
       collected: emptyIntakeCollected(),
       ...baseParams,
     });
-    assert.equal(r.nextState, 'leak_location_secondary_capture');
-    assert.equal(r.assistantLine, 'Does it seem like the faucet itself, or the drain?');
+    assert.equal(r.nextState, 'collect_name');
+    assert.equal(r.assistantLine, "Got it. What's your name?");
     assert.equal(r.collected.leakPrimary, 'faucet');
-    assert.equal(r.collected.leakSecondary, null);
+    assert.equal(r.collected.leakSecondary, 'faucet_self');
   });
 
   it('issue_capture under sink without pipe/drain asks secondary (below path)', () => {
@@ -223,7 +664,10 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       ...baseParams,
     });
     assert.equal(r.nextState, 'leak_location_secondary_capture');
-    assert.equal(r.assistantLine, 'Does it seem like a pipe, or the drain?');
+    assert.equal(
+      r.assistantLine,
+      'Is it the pipes under the sink, the drain, or something else right around the sink?'
+    );
     assert.equal(r.collected.leakPrimary, 'below_sink');
   });
 
@@ -250,10 +694,29 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       },
       ...baseParams,
     });
-    assert.equal(r.nextState, 'leak_location_secondary_capture');
-    assert.equal(r.assistantLine, 'Does it seem like the faucet itself, or the drain?');
+    assert.equal(r.nextState, 'collect_name');
+    assert.equal(r.assistantLine, "Got it. What's your name?");
     assert.equal(r.collected.leakPrimary, 'faucet');
-    assert.equal(r.collected.leakSecondary, null);
+    assert.equal(r.collected.leakSecondary, 'faucet_self');
+  });
+
+  it('kitchen_sink_confirm at faucet overrides below_sink infer without under-sink secondary prompt', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'kitchen_sink_confirm',
+      utterance: 'at the faucet',
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        leakPrimary: 'below_sink',
+        leakSecondary: 'drain',
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_name');
+    assert.equal(r.assistantLine, "Got it. What's your name?");
+    assert.equal(r.collected.leakPrimary, 'faucet');
+    assert.equal(r.collected.leakSecondary, 'faucet_self');
+    assert.ok(!r.assistantLine.toLowerCase().includes('under the sink'));
   });
 
   it('kitchen_sink_confirm bare yes goes to primary forced-choice', () => {
@@ -267,7 +730,10 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       ...baseParams,
     });
     assert.equal(r.nextState, 'leak_location_primary_capture');
-    assert.equal(r.assistantLine, 'Is it at the faucet, or below the sink?');
+    assert.equal(
+      r.assistantLine,
+      'Is it coming from the faucet or the pipes below the sink?'
+    );
   });
 
   it('leak_location_primary_capture below the sink then secondary below path', () => {
@@ -281,7 +747,10 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       ...baseParams,
     });
     assert.equal(r.nextState, 'leak_location_secondary_capture');
-    assert.equal(r.assistantLine, 'Does it seem like a pipe, or the drain?');
+    assert.equal(
+      r.assistantLine,
+      'Is it the pipes under the sink, the drain, or something else right around the sink?'
+    );
     assert.equal(r.collected.leakPrimary, 'below_sink');
   });
 
@@ -327,6 +796,32 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
     assert.equal(r.nextState, 'issue_capture');
     assert.ok(r.assistantLine.toLowerCase().includes('plumbing'));
     assert.ok(!r.assistantLine.toLowerCase().includes('little more'));
+  });
+
+  it('issue_capture ignores single-character garbage transcript', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'issue_capture',
+      utterance: '\u516d',
+      collected: emptyIntakeCollected(),
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'issue_capture');
+    assert.equal(r.issueMatchResult?.accepted, false);
+    assert.equal(r.issueMatchResult?.rejectReason, 'unusable_transcript');
+    assert.ok(r.assistantLine.toLowerCase().includes('plumbing'));
+  });
+
+  it('issue_capture ASR-empty bumps issue retry and uses narrow plumbing reprompt', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'issue_capture',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected: emptyIntakeCollected(),
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'issue_capture');
+    assert.equal(r.issueMatchResult?.rejectReason, 'asr_empty');
+    assert.equal(r.slotRetryCounts.issue, 1);
+    assert.ok(r.assistantLine.toLowerCase().includes('plumbing'));
   });
 
   it('post-triage transitions ask for name with handoff copy, never close', () => {
@@ -448,6 +943,9 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       addressRemainderDeferredToSms: false,
       zipPartialDigits: null,
       callbackPhonePartialDigits: null,
+      ...OPEN_LOCKS,
+      callbackInboundConfirmRejected: false,
+      unitOrSuite: null,
     };
     const r = transitionKitchenSinkLeakOnly({
       state: 'callback_confirm',
@@ -458,6 +956,41 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
     });
     assert.equal(r.nextState, 'collect_name');
     assert.notEqual(r.nextState, 'close');
+    assert.equal(r.collected.callbackTimePreference, 'the morning');
+    assert.equal(lineContainsPrematureSchedulingPromise(r.assistantLine), false);
+  });
+
+  it('callback_confirm direct bucket answer defers close when lead invalid and keeps updated window', () => {
+    const collected: KitchenSinkCollected = {
+      normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+      leakPrimary: 'below_sink',
+      leakSecondary: 'drain',
+      callerName: null,
+      serviceAddress: null,
+      streetAddress: null,
+      city: null,
+      state: null,
+      zip: null,
+      inboundCallerPhoneE164: null,
+      callbackPhoneNumber: '+15550001111',
+      callbackPhoneSource: 'spoken',
+      callbackTimePreference: 'the morning',
+      addressRemainderDeferredToSms: false,
+      zipPartialDigits: null,
+      callbackPhonePartialDigits: null,
+      ...OPEN_LOCKS,
+      callbackInboundConfirmRejected: false,
+      unitOrSuite: null,
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'callback_confirm',
+      utterance: 'afternoon',
+      collected,
+      ...baseParams,
+      pendingCallbackNormalized: 'morning',
+    });
+    assert.equal(r.nextState, 'collect_name');
+    assert.equal(r.collected.callbackTimePreference, 'the afternoon');
     assert.equal(lineContainsPrematureSchedulingPromise(r.assistantLine), false);
   });
 
@@ -469,11 +1002,43 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       ...baseParams,
       pendingCallbackNormalized: 'morning',
     });
-    assert.equal(r.nextState, 'close');
-    assert.ok(r.assistantLine.startsWith('Thanks, Alex'));
-    assert.ok(r.assistantLine.includes('confirmation text'));
+    assert.equal(r.nextState, 'close_wait');
+    assert.ok(r.assistantLine.toLowerCase().includes('thanks for calling') || r.assistantLine.toLowerCase().includes("we'll call you"));
+    assert.ok(r.assistantLine.toLowerCase().includes('goodbye'));
     assert.equal(allRequiredFieldsValid(r.collected), true);
     assert.equal(lineContainsPrematureSchedulingPromise(r.assistantLine), false);
+  });
+
+  it('close_wait thanks path closes with short thanks reply', () => {
+    const start = transitionKitchenSinkLeakOnly({
+      state: 'callback_confirm',
+      utterance: 'yes',
+      collected: baseCollected(),
+      ...baseParams,
+      pendingCallbackNormalized: 'morning',
+    });
+    assert.equal(start.nextState, 'close_wait');
+    const thanks = transitionKitchenSinkLeakOnly({
+      state: 'close_wait',
+      utterance: 'thank you',
+      collected: start.collected,
+      ...baseParams,
+    });
+    assert.equal(thanks.nextState, 'close');
+    assert.equal(thanks.assistantLine, "You're welcome. Thanks for calling. Goodbye.");
+    assert.equal(thanks.awaitingUserAudioAfter, false);
+  });
+
+  it('close_wait ASR-empty auto-closes with standard signoff', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'close_wait',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected: baseCollected(),
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'close');
+    assert.ok(r.assistantLine.includes('Goodbye'));
+    assert.equal(r.awaitingUserAudioAfter, false);
   });
 
   it('kitchen_sink_confirm negation+correction overwrites leak slots and goes to name', () => {
@@ -556,8 +1121,101 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       ...baseParams,
       pendingCallbackNormalized: 'morning',
     });
-    assert.equal(r.nextState, 'close');
-    assert.ok(r.assistantLine.includes('text follow-up'));
+    assert.equal(r.nextState, 'close_wait');
+    assert.ok(r.assistantLine.toLowerCase().includes('text'));
+    assert.ok(r.assistantLine.toLowerCase().includes('preferred callback window'));
+    assert.ok(r.assistantLine.toLowerCase().includes('goodbye'));
+  });
+
+  it('callback_confirm accepts direct bucket answer (afternoon) without yes/no loop', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'callback_confirm',
+      utterance: 'afternoon',
+      collected: {
+        ...baseCollected(),
+        addressRemainderDeferredToSms: true,
+        city: null,
+        state: null,
+        zip: null,
+        serviceAddress: null,
+      },
+      ...baseParams,
+      pendingCallbackNormalized: 'morning',
+    });
+    assert.equal(r.nextState, 'close_wait');
+    assert.ok(r.assistantLine.toLowerCase().includes('afternoon'));
+    assert.ok(r.assistantLine.toLowerCase().includes('got it'));
+    assert.ok(r.assistantLine.toLowerCase().includes('goodbye'));
+  });
+
+  it('callback_confirm direct evening close omits phone when callback is not locked/trusted', () => {
+    const collected: KitchenSinkCollected = {
+      ...baseCollected(),
+      callbackLocked: false,
+      callbackPhoneSource: null,
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'callback_confirm',
+      utterance: 'evening',
+      collected,
+      ...baseParams,
+      pendingCallbackNormalized: 'morning',
+    });
+    assert.equal(r.nextState, 'close_wait');
+    assert.ok(r.assistantLine.toLowerCase().includes('evening'));
+    assert.ok(r.assistantLine.toLowerCase().includes('confirm the best number separately'));
+    assert.ok(!r.assistantLine.includes('555-123-4567'));
+    assert.ok(!r.assistantLine.includes('443254'));
+  });
+
+  it('collect_callback_time invalid then reprompt narrows without repeating the long option list', () => {
+    const collected: KitchenSinkCollected = {
+      ...baseCollected(),
+      callbackTimePreference: null,
+    };
+    const first = transitionKitchenSinkLeakOnly({
+      state: 'collect_callback_time',
+      utterance: 'maybe later',
+      collected,
+      ...baseParams,
+    });
+    assert.equal(first.nextState, 'collect_callback_time');
+    assert.ok(!first.assistantLine.toLowerCase().includes('such as morning'));
+    assert.ok(first.assistantLine.toLowerCase().includes('morning'));
+    const second = transitionKitchenSinkLeakOnly({
+      state: 'collect_callback_time',
+      utterance: 'evening',
+      collected: first.collected,
+      ...baseParams,
+      slotRetryCounts: first.slotRetryCounts,
+    });
+    assert.equal(second.nextState, 'callback_confirm');
+  });
+
+  it('collect_city rejects digit-heavy partial phone fragments as city', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_city',
+      utterance: '443254',
+      collected: afterStreetCollected(),
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_city');
+    assert.equal(r.collected.city, null);
+  });
+
+  it('full address present: address ASR-empty does not defer to SMS', () => {
+    const c: KitchenSinkCollected = {
+      ...baseCollected(),
+      addressRemainderDeferredToSms: false,
+      serviceAddress: null,
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'address_confirm',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected: c,
+      ...baseParams,
+    });
+    assert.notEqual(r.nextState, 'address_city_deferred_sms');
   });
 
   it('collect_city combined city state zip skips duplicate zip question', () => {
@@ -661,6 +1319,11 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       addressRemainderDeferredToSms: false,
       zipPartialDigits: null,
       callbackPhonePartialDigits: null,
+      ...OPEN_LOCKS,
+      streetLocked: true,
+      cityLocked: true,
+      stateLocked: true,
+      zipLocked: true,
     };
     const r = transitionKitchenSinkLeakOnly({
       state: 'address_confirm',
@@ -688,6 +1351,36 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
     assert.equal(r.collected.callerName, 'Matt');
   });
 
+  it('collect_name rejects service words and correction phrases', () => {
+    const collected = {
+      ...afterStreetCollected(),
+      normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+      leakPrimary: 'below_sink' as const,
+      leakSecondary: 'drain' as const,
+      callerName: null,
+      streetAddress: null,
+      city: null,
+      state: null,
+      zip: null,
+    };
+    const a = transitionKitchenSinkLeakOnly({
+      state: 'collect_name',
+      utterance: 'Dishwasher',
+      collected,
+      ...baseParams,
+    });
+    assert.equal(a.nextState, 'collect_name');
+    assert.equal(a.collected.callerName, null);
+    const b = transitionKitchenSinkLeakOnly({
+      state: 'collect_name',
+      utterance: "No, that's not correct",
+      collected,
+      ...baseParams,
+    });
+    assert.equal(b.nextState, 'collect_name');
+    assert.equal(b.collected.callerName, null);
+  });
+
   it('collect_callback_time callback intent re-prompts without burning retry slot', () => {
     const collected: KitchenSinkCollected = {
       ...afterStreetCollected(),
@@ -702,6 +1395,12 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       addressRemainderDeferredToSms: false,
       zipPartialDigits: null,
       callbackPhonePartialDigits: null,
+      ...OPEN_LOCKS,
+      streetLocked: true,
+      cityLocked: true,
+      stateLocked: true,
+      zipLocked: true,
+      callbackLocked: true,
     };
     const r = transitionKitchenSinkLeakOnly({
       state: 'collect_callback_time',
@@ -734,7 +1433,7 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       collected,
       ...baseParams,
     });
-    assert.equal(comma.nextState, 'collect_city');
+    assert.equal(comma.nextState, 'collect_unit');
     assert.equal(comma.collected.streetAddress, '123 Smith Street');
     assert.equal(comma.collected.city, null);
     const inForm = transitionKitchenSinkLeakOnly({
@@ -743,9 +1442,45 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       collected,
       ...baseParams,
     });
-    assert.equal(inForm.nextState, 'collect_city');
+    assert.equal(inForm.nextState, 'collect_unit');
     assert.equal(inForm.collected.streetAddress, '123 Smith Street');
     assert.equal(inForm.collected.city, null);
+  });
+
+  it('collect_street_address compacts split leading digits before street name', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: '1 2 3 main st',
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        leakPrimary: 'below_sink',
+        leakSecondary: 'drain',
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_unit');
+    assert.equal(r.collected.streetAddress, '123 Main Street');
+  });
+
+  it('collect_street_address ASR-empty advances to city when locked street already exists', () => {
+    const collected: KitchenSinkCollected = {
+      ...afterStreetCollected(),
+      streetAddress: '123 Main Street',
+      streetLocked: true,
+      city: null,
+      state: null,
+      zip: null,
+      serviceAddress: null,
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+      collected,
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_city');
+    assert.equal(r.assistantLine, 'Got it. What city is that in?');
   });
 
   it('collect_city first invalid city reprompts with partial street line', () => {
@@ -760,33 +1495,124 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
     assert.ok(r.assistantLine.includes('100 Main St'));
   });
 
-  it('collect_city second invalid city with valid street defers remainder to SMS', () => {
-    const first = transitionKitchenSinkLeakOnly({
+  it('collect_city does not accept acknowledgements like yes as city', () => {
+    const r = transitionKitchenSinkLeakOnly({
       state: 'collect_city',
-      utterance: 'Texas',
+      utterance: 'yes',
       collected: afterStreetCollected(),
       ...baseParams,
     });
-    assert.equal(first.nextState, 'collect_city');
-    const second = transitionKitchenSinkLeakOnly({
-      state: 'collect_city',
-      utterance: 'California',
-      collected: first.collected,
-      ...baseParams,
-      slotRetryCounts: first.slotRetryCounts,
-    });
-    assert.equal(second.nextState, 'address_city_deferred_sms');
-    assert.equal(second.collected.addressRemainderDeferredToSms, true);
-    assert.equal(second.collected.city, null);
-    assert.ok(second.assistantLine.toLowerCase().includes('text'));
+    assert.equal(r.nextState, 'collect_city');
+    assert.equal(r.collected.city, null);
+  });
+
+  it('collect_city fourth invalid city with plausible street defers remainder to SMS', () => {
+    let slot: Partial<Record<KitchenSinkSlotRetryKey, number>> = {};
+    let collected: KitchenSinkCollected = afterStreetCollected();
+    const badCities = ['Texas', 'California', 'Vermont', 'Colorado'];
+    let last: ReturnType<typeof transitionKitchenSinkLeakOnly> | null = null;
+    for (const u of badCities) {
+      last = transitionKitchenSinkLeakOnly({
+        state: 'collect_city',
+        utterance: u,
+        collected,
+        ...baseParams,
+        slotRetryCounts: slot,
+      });
+      slot = last.slotRetryCounts;
+      collected = last.collected;
+      if (last.nextState === 'address_city_deferred_sms') {
+        break;
+      }
+    }
+    assert.ok(last);
+    assert.equal(last!.nextState, 'address_city_deferred_sms');
+    assert.equal(last!.collected.addressRemainderDeferredToSms, true);
+    assert.equal(last!.collected.city, null);
+    assert.ok(last!.assistantLine.toLowerCase().includes('text'));
 
     const third = transitionKitchenSinkLeakOnly({
       state: 'address_city_deferred_sms',
       utterance: 'okay',
-      collected: second.collected,
+      collected: last!.collected,
       ...baseParams,
     });
     assert.equal(third.nextState, 'callback_number_collect');
+  });
+
+  it('address_city_deferred_sms lets caller resume address capture by voice', () => {
+    const deferred: KitchenSinkCollected = {
+      ...afterStreetCollected(),
+      addressRemainderDeferredToSms: true,
+      city: null,
+      state: null,
+      zip: null,
+      serviceAddress: null,
+      cityLocked: false,
+      stateLocked: false,
+      zipLocked: false,
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'address_city_deferred_sms',
+      utterance: 'No, I want to give you my address',
+      collected: deferred,
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_street_address');
+    assert.equal(r.collected.addressRemainderDeferredToSms, false);
+    assert.ok(r.assistantLine.toLowerCase().includes('street address'));
+  });
+
+  it('address_city_deferred_sms always asks for callback digits (no ANI yes/no confirm)', () => {
+    const deferred: KitchenSinkCollected = {
+      ...afterStreetCollected(),
+      addressRemainderDeferredToSms: true,
+      city: null,
+      state: null,
+      zip: null,
+      serviceAddress: null,
+      cityLocked: false,
+      stateLocked: false,
+      zipLocked: false,
+      inboundCallerPhoneE164: '+14432541963',
+      callbackPhoneNumber: null,
+      callbackPhoneSource: null,
+      callbackLocked: false,
+      callbackInboundConfirmRejected: false,
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'address_city_deferred_sms',
+      utterance: 'okay',
+      collected: deferred,
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'callback_number_collect');
+    assert.ok(r.assistantLine.toLowerCase().includes('best number'));
+  });
+
+  it('collect_city "everything" after address rejection resets to street capture', () => {
+    const collected: KitchenSinkCollected = {
+      ...afterStreetCollected(),
+      city: null,
+      state: null,
+      zip: null,
+      serviceAddress: null,
+      streetAddress: '123 Main Street',
+      streetLocked: true,
+      cityLocked: false,
+      stateLocked: false,
+      zipLocked: false,
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_city',
+      utterance: 'everything',
+      collected,
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_street_address');
+    assert.equal(r.collected.streetAddress, null);
+    assert.equal(r.collected.city, null);
+    assert.ok(r.assistantLine.toLowerCase().includes('street'));
   });
 
   it('address repair phrases stay in address collection with apology line', () => {
@@ -820,6 +1646,11 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       addressRemainderDeferredToSms: false,
       zipPartialDigits: null,
       callbackPhonePartialDigits: null,
+      ...OPEN_LOCKS,
+      streetLocked: true,
+      cityLocked: true,
+      stateLocked: true,
+      zipLocked: true,
     };
     const r = transitionKitchenSinkLeakOnly({
       state: 'address_confirm',
@@ -843,6 +1674,108 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
     assert.equal(r.nextState, 'collect_name');
     assert.equal(r.collected.normalizedIssue, WATER_HEATER_LEAK_ISSUE);
     assert.ok(r.assistantLine.toLowerCase().includes('water heater'));
+  });
+
+  it('issue_capture generic leak routes to shared name intake without forced room menu', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'issue_capture',
+      utterance: 'there is a leak in the ceiling',
+      collected: emptyIntakeCollected(),
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_name');
+    assert.equal(r.collected.normalizedIssue, 'general_plumbing_leak');
+    assert.ok(r.assistantLine.toLowerCase().includes("what's your name"));
+  });
+
+  it('issue_capture routes painting requests in painting mode', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'issue_capture',
+      utterance: 'I need interior painting for two bedrooms',
+      collected: emptyIntakeCollected(),
+      ...baseParams,
+      activeTestMode: 'painting_intake',
+    });
+    assert.equal(r.nextState, 'painting_scope_capture');
+    assert.equal(r.collected.normalizedIssue, 'interior_paint');
+    assert.ok(r.assistantLine.toLowerCase().includes('walls'));
+  });
+
+  it('issue_capture paints my kitchen routes to interior_paint in painting mode', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'issue_capture',
+      utterance: "I'd like to paint my kitchen",
+      collected: emptyIntakeCollected(),
+      ...baseParams,
+      activeTestMode: 'painting_intake',
+    });
+    assert.equal(r.nextState, 'painting_scope_capture');
+    assert.equal(r.collected.normalizedIssue, 'interior_paint');
+    assert.ok(r.assistantLine.toLowerCase().includes('walls'));
+  });
+
+  it('painting_scope_capture interior surfaces then advances to name', () => {
+    const first = transitionKitchenSinkLeakOnly({
+      state: 'issue_capture',
+      utterance: "I'd like to paint my living room",
+      collected: emptyIntakeCollected(),
+      ...baseParams,
+      activeTestMode: 'painting_intake',
+    });
+    assert.equal(first.nextState, 'painting_scope_capture');
+    const second = transitionKitchenSinkLeakOnly({
+      state: 'painting_scope_capture',
+      utterance: 'both walls and ceiling',
+      collected: first.collected,
+      ...baseParams,
+      activeTestMode: 'painting_intake',
+      slotRetryCounts: first.slotRetryCounts,
+    });
+    assert.equal(second.nextState, 'collect_name');
+    assert.equal(second.collected.paintingSurfaceScope, 'both');
+    assert.ok(second.assistantLine.toLowerCase().includes("what's your name"));
+  });
+
+  it('painting_scope_capture ambiguous twice falls through to name intake', () => {
+    const first = transitionKitchenSinkLeakOnly({
+      state: 'issue_capture',
+      utterance: 'I need painting',
+      collected: emptyIntakeCollected(),
+      ...baseParams,
+      activeTestMode: 'painting_intake',
+    });
+    assert.equal(first.nextState, 'painting_scope_capture');
+    const second = transitionKitchenSinkLeakOnly({
+      state: 'painting_scope_capture',
+      utterance: 'not sure',
+      collected: first.collected,
+      ...baseParams,
+      activeTestMode: 'painting_intake',
+      slotRetryCounts: first.slotRetryCounts,
+    });
+    assert.equal(second.nextState, 'painting_scope_capture');
+    const third = transitionKitchenSinkLeakOnly({
+      state: 'painting_scope_capture',
+      utterance: 'whatever',
+      collected: second.collected,
+      ...baseParams,
+      activeTestMode: 'painting_intake',
+      slotRetryCounts: second.slotRetryCounts,
+    });
+    assert.equal(third.nextState, 'collect_name');
+  });
+
+  it('issue_capture rejects plumbing in painting mode as off-lane', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'issue_capture',
+      utterance: 'my faucet is leaking',
+      collected: emptyIntakeCollected(),
+      ...baseParams,
+      activeTestMode: 'painting_intake',
+    });
+    assert.equal(r.nextState, 'unsupported_end');
+    assert.equal(r.callOutcome, 'unsupported_issue');
+    assert.ok(r.assistantLine.toLowerCase().includes('painting and light trim'));
   });
 
   it('address_confirm no keeps street and narrows to city step', () => {
@@ -883,6 +1816,12 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       addressRemainderDeferredToSms: false,
       zipPartialDigits: null,
       callbackPhonePartialDigits: null,
+      ...OPEN_LOCKS,
+      streetLocked: true,
+      cityLocked: true,
+      stateLocked: true,
+      zipLocked: true,
+      callbackLocked: true,
     };
     const r = transitionKitchenSinkLeakOnly({
       state: 'collect_callback_time',
@@ -893,7 +1832,236 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
     assert.equal(r.nextState, 'collect_callback_time');
   });
 
-  it('three ASR-empty signals during collect_city defer to SMS handoff', () => {
+  it('collect_street accepts 123 main st and confirms before city', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: '123 main st',
+      collected: { ...baseCollected(), streetAddress: null, city: null, state: null, zip: null },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_unit');
+    assert.equal(r.collected.streetAddress, '123 Main Street');
+    assert.ok(r.assistantLine.toLowerCase().includes('unit'));
+  });
+
+  it('collect_city stuttered Dover collapses and saves city', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_city',
+      utterance: 'dover dover dover',
+      collected: afterStreetCollected(),
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_state');
+    assert.equal(r.collected.city, 'Dover');
+  });
+
+  it('locked name cannot be overwritten by later city capture', () => {
+    const c: KitchenSinkCollected = {
+      ...emptyIntakeCollected(),
+      normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+      leakPrimary: 'below_sink',
+      leakSecondary: 'drain',
+      callerName: 'Alex',
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_city',
+      utterance: 'Dover',
+      collected: c,
+      ...baseParams,
+    });
+    assert.equal(r.collected.callerName, 'Alex');
+  });
+
+  it('leak_location_secondary below_sink reprompt stays sink-scoped without toilet', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'leak_location_secondary_capture',
+      utterance: 'uh',
+      collected: {
+        ...emptyIntakeCollected(),
+        normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+        callerName: 'Sam',
+        leakPrimary: 'below_sink',
+        leakSecondary: null,
+      },
+      ...baseParams,
+      secondaryLeakReprompts: 0,
+    });
+    assert.equal(r.nextState, 'leak_location_secondary_capture');
+    assert.ok(!r.assistantLine.toLowerCase().includes('toilet'));
+  });
+
+  it('collect_zip accepts five digits embedded in noise and clears partial ZIP state', () => {
+    const collected = {
+      ...afterStreetCollected(),
+      city: 'Dover',
+      state: 'DE',
+      serviceAddress: null,
+      zipPartialDigits: '1990',
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_zip',
+      utterance: 'zip is 19901 please',
+      collected,
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'address_confirm');
+    assert.equal(r.collected.zip, '19901');
+    assert.equal(r.collected.zipPartialDigits, null);
+  });
+
+  it('collect_zip with locked valid ZIP skips full-ZIP recovery on garbled follow-up', () => {
+    const collected: KitchenSinkCollected = {
+      ...emptyIntakeCollected(),
+      normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+      leakPrimary: 'below_sink',
+      leakSecondary: 'drain',
+      callerName: 'Pat',
+      streetAddress: '10 Oak St',
+      city: 'Dover',
+      state: 'DE',
+      zip: '19901',
+      streetLocked: true,
+      cityLocked: true,
+      stateLocked: true,
+      zipLocked: true,
+      zipPartialDigits: '1990',
+      serviceAddress: null,
+      inboundCallerPhoneE164: null,
+      callbackPhoneNumber: null,
+      callbackPhoneSource: null,
+      callbackTimePreference: null,
+      addressRemainderDeferredToSms: false,
+      callbackPhonePartialDigits: null,
+    };
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_zip',
+      utterance: "what's the full zip code",
+      collected,
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'address_confirm');
+    assert.equal(r.collected.zip, '19901');
+    assert.equal(r.collected.zipPartialDigits, null);
+    assert.ok(!r.assistantLine.toLowerCase().includes('full five-digit'));
+  });
+
+  it('callback_number_collect second partial failure uses softer reprompt and stays on callback', () => {
+    const collected = {
+      ...baseCollected(),
+      streetAddress: null,
+      city: null,
+      state: null,
+      zip: null,
+      serviceAddress: null,
+      callbackPhoneNumber: null,
+      callbackPhoneSource: null,
+      callbackTimePreference: null,
+      ...OPEN_LOCKS,
+    };
+    const first = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_collect',
+      utterance: '443254',
+      collected,
+      ...baseParams,
+    });
+    assert.equal(first.nextState, 'callback_number_collect');
+    assert.ok(first.assistantLine.toLowerCase().includes('caught'));
+    assert.ok(/\d/.test(first.assistantLine));
+    const second = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_collect',
+      utterance: '443254',
+      collected: first.collected,
+      ...baseParams,
+      slotRetryCounts: first.slotRetryCounts,
+    });
+    assert.equal(second.nextState, 'callback_number_collect');
+    assert.ok(second.assistantLine.includes('No problem'));
+    assert.ok(second.assistantLine.toLowerCase().includes('number'));
+  });
+
+  it('callback_number_collect objection clears partial and never advances to callback time until full NANP', () => {
+    const collected: KitchenSinkCollected = {
+      ...emptyIntakeCollected(),
+      normalizedIssue: KITCHEN_SINK_LEAK_NORMALIZED,
+      leakPrimary: 'faucet',
+      leakSecondary: 'faucet_self',
+      callerName: 'Pat',
+      streetAddress: '10 Oak St',
+      city: 'Dover',
+      state: 'DE',
+      zip: '19901',
+      streetLocked: true,
+      cityLocked: true,
+      stateLocked: true,
+      zipLocked: true,
+      serviceAddress: null,
+      inboundCallerPhoneE164: null,
+      callbackPhoneNumber: null,
+      callbackPhoneSource: null,
+      callbackTimePreference: null,
+      addressRemainderDeferredToSms: false,
+      callbackPhonePartialDigits: null,
+      callbackLocked: false,
+    };
+    const partial = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_collect',
+      utterance: '5551234',
+      collected,
+      ...baseParams,
+    });
+    assert.equal(partial.nextState, 'callback_number_collect');
+    assert.ok(partial.collected.callbackPhonePartialDigits);
+
+    const objection = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_collect',
+      utterance: "you don't have my full number",
+      collected: partial.collected,
+      ...baseParams,
+      slotRetryCounts: partial.slotRetryCounts,
+    });
+    assert.equal(objection.nextState, 'callback_number_collect');
+    assert.equal(objection.collected.callbackPhonePartialDigits, null);
+    assert.equal(objection.collected.callbackPhoneNumber, null);
+    assert.equal(objection.assistantLine, "What's the best number to call or text you at?");
+
+    const stillPartial = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_collect',
+      utterance: '5551234',
+      collected: objection.collected,
+      ...baseParams,
+      slotRetryCounts: objection.slotRetryCounts,
+    });
+    assert.equal(stillPartial.nextState, 'callback_number_collect');
+    assert.notEqual(stillPartial.nextState, 'collect_callback_time');
+
+    const full = transitionKitchenSinkLeakOnly({
+      state: 'callback_number_collect',
+      utterance: '3025551234',
+      collected: stillPartial.collected,
+      ...baseParams,
+      slotRetryCounts: stillPartial.slotRetryCounts,
+    });
+    assert.equal(full.nextState, 'callback_number_confirm');
+    assert.equal(full.collected.callbackPhoneNumber, '+13025551234');
+    assert.equal(full.collected.callbackLocked, false);
+  });
+
+  it('collect_street does not overwrite locked good street without correction intent', () => {
+    const r = transitionKitchenSinkLeakOnly({
+      state: 'collect_street_address',
+      utterance: '124 pine street',
+      collected: {
+        ...afterStreetCollected(),
+        streetAddress: '123 Main Street',
+        streetLocked: true,
+      },
+      ...baseParams,
+    });
+    assert.equal(r.nextState, 'collect_city');
+    assert.equal(r.collected.streetAddress, '123 Main Street');
+  });
+
+  it('five ASR-empty on collect_city with plausible street does not yet defer to SMS', () => {
     const c = afterStreetCollected();
     let slot: Partial<Record<KitchenSinkSlotRetryKey, number>> = {};
     let last = transitionKitchenSinkLeakOnly({
@@ -903,22 +2071,40 @@ describe('kitchenSinkLeakOnlyStateMachine', () => {
       ...baseParams,
       slotRetryCounts: slot,
     });
-    slot = last.slotRetryCounts;
-    last = transitionKitchenSinkLeakOnly({
+    for (let i = 0; i < 4; i++) {
+      slot = last.slotRetryCounts;
+      last = transitionKitchenSinkLeakOnly({
+        state: 'collect_city',
+        utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+        collected: last.collected,
+        ...baseParams,
+        slotRetryCounts: slot,
+      });
+    }
+    assert.equal(last.nextState, 'collect_city');
+    assert.equal(last.collected.addressRemainderDeferredToSms, false);
+  });
+
+  it('six ASR-empty signals during collect_city defer to SMS when street already plausible', () => {
+    const c = afterStreetCollected();
+    let slot: Partial<Record<KitchenSinkSlotRetryKey, number>> = {};
+    let last = transitionKitchenSinkLeakOnly({
       state: 'collect_city',
       utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
-      collected: last.collected,
+      collected: c,
       ...baseParams,
       slotRetryCounts: slot,
     });
-    slot = last.slotRetryCounts;
-    last = transitionKitchenSinkLeakOnly({
-      state: 'collect_city',
-      utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
-      collected: last.collected,
-      ...baseParams,
-      slotRetryCounts: slot,
-    });
+    for (let i = 0; i < 5; i++) {
+      slot = last.slotRetryCounts;
+      last = transitionKitchenSinkLeakOnly({
+        state: 'collect_city',
+        utterance: ASR_EMPTY_TRANSCRIPT_SIGNAL,
+        collected: last.collected,
+        ...baseParams,
+        slotRetryCounts: slot,
+      });
+    }
     assert.equal(last.nextState, 'address_city_deferred_sms');
     assert.equal(last.collected.addressRemainderDeferredToSms, true);
   });

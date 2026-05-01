@@ -8,7 +8,10 @@
 
 export const VOICE_MODE_KITCHEN_SINK_LEAK_ONLY_DEFAULT = true;
 
-export type KitchenSinkLeakOnlyActiveTestMode = 'kitchen_sink_leak_only' | 'plumbing_intake';
+export type KitchenSinkLeakOnlyActiveTestMode =
+  | 'kitchen_sink_leak_only'
+  | 'plumbing_intake'
+  | 'painting_intake';
 
 export function getVoiceModeKitchenSinkLeakOnlyEnvRaw(): string {
   return process.env.VOICE_MODE_KITCHEN_SINK_LEAK_ONLY?.trim() ?? '';
@@ -42,5 +45,12 @@ export function isVoiceKitchenSinkLeakOnlyMode(): boolean {
 }
 
 export function getKitchenSinkLeakOnlyActiveTestMode(): KitchenSinkLeakOnlyActiveTestMode {
+  const raw = process.env.VOICE_KITCHEN_SINK_TEST_MODE?.trim().toLowerCase() ?? '';
+  if (raw === 'painting_intake' || raw === 'paint_intake' || raw === 'painting') {
+    return 'painting_intake';
+  }
+  if (raw === 'kitchen_sink_leak_only' || raw === 'kitchen_sink') {
+    return 'kitchen_sink_leak_only';
+  }
   return 'plumbing_intake';
 }

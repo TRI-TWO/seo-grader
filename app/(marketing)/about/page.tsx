@@ -31,11 +31,11 @@ export default function AboutPage() {
 
           <div className="space-y-6 text-lg text-gray-300 leading-relaxed">
             <p>
-              We're a regional SEO company focused on helping service businesses get discovered by the people actively searching for them.
+              We&apos;re a regional SEO company focused on helping service businesses get discovered by the people actively searching for them.
             </p>
 
             <p>
-              Our platform uses a robust SEO scoring system to measure how well your website is indexed, ranked, and surfaced to real customers — not just search engines. Every score is tied to clear, actionable improvements so you always know what's helping or hurting your visibility.
+              Our platform uses a robust SEO scoring system to measure how well your website is indexed, ranked, and surfaced to real customers — not just search engines. Every score is tied to clear, actionable improvements so you always know what&apos;s helping or hurting your visibility.
             </p>
 
             <p>

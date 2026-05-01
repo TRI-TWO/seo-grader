@@ -12,6 +12,7 @@ import {
   matchPlumbingIntakeIssue,
   plumbingIssueAckLine,
   SUPPORTED_PLUMBING_INTAKE_ISSUES,
+  type PlumbingIntakeIssue,
 } from '@/lib/bot/plumbingIntakeMatchers';
 import {
   EXTERIOR_PAINT_ISSUE,
@@ -21,6 +22,7 @@ import {
   matchPaintingIntakeIssue,
   paintingIssueAckLine,
   SUPPORTED_PAINTING_INTAKE_ISSUES,
+  type PaintingIntakeIssue,
 } from '@/lib/bot/paintingIntakeMatchers';
 import type { KitchenSinkLeakOnlyActiveTestMode } from '@/lib/bot/kitchenSinkLeakOnlyVoiceMode';
 import {
@@ -1511,8 +1513,8 @@ export function transitionKitchenSinkLeakOnly(params: {
       }
       const ack =
         activeTestMode === 'painting_intake'
-          ? paintingIssueAckLine(issue)
-          : plumbingIssueAckLine(issue);
+          ? paintingIssueAckLine(issue as PaintingIntakeIssue)
+          : plumbingIssueAckLine(issue as PlumbingIntakeIssue);
       const reason = activeTestMode === 'painting_intake' ? 'painting_issue_routed' : 'plumbing_issue_routed';
       return br(
         {
